@@ -33,19 +33,38 @@ class IntentContainer:
         for intent_name, regexes in self.intent_samples.items():
             regexes = sorted(regexes, key=len, reverse=True)
             for r in regexes:
-                entities = simplematch.match(r, query, case_sensitive=True)
                 penalty = 0
                 if "*" in r:
+                    # penalize wildcards
                     penalty = 0.15
-                if entities is not None or query in regexes:
+
+                entities = simplematch.match(r, query, case_sensitive=True)
+                if entities is not None:
+                    for k, v in entities.items():
+                        if k not in self.entity_samples:
+                            # penalize unregistered entities
+                            penalty += 0.1
+                        elif str(v) not in self.entity_samples[k]:
+                            # penalize unknown samples
+                            penalty += 0.05
                     yield {"entities": entities or {},
                            "conf": 1 - penalty,
                            "name": intent_name}
                     break
+
                 entities = simplematch.match(r, query, case_sensitive=False)
-                if entities is not None or query.lower() in regexes:
+                if entities is not None:
+                    # penalize case mismatch
+                    penalty += 0.05
+                    for k, v in entities.items():
+                        if k not in self.entity_samples:
+                            # penalize unregistered entities
+                            penalty += 0.1
+                        elif str(v) not in self.entity_samples[k]:
+                            # penalize unknown samples
+                            penalty += 0.05
                     yield {"entities": entities or {},
-                           "conf": 0.9 - penalty,
+                           "conf": 1 - penalty,
                            "name": intent_name}
                     break
 

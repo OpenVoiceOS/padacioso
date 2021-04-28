@@ -47,8 +47,13 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(container.calc_intent('buy milk'), {
             'name': 'buy', 'entities': {'item': 'milk'},  "conf": 1
         })
+        self.assertEqual(container.calc_intent('buy beer'), {
+            'name': 'buy', 'entities': {'item': 'beer'},
+            "conf": 0.95  # unseen entity example
+        })
         self.assertEqual(container.calc_intent('eat some bananas'), {
-            'name': 'eat', 'entities': {'fruit': 'bananas'}, "conf": 1
+            'name': 'eat', 'entities': {'fruit': 'bananas'},
+            "conf": 0.9  # unregistered entity
         })
 
     def test_case(self):
@@ -57,14 +62,14 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(
             container.calc_intent('Testing cAPitalizAtion')['conf'], 1.0)
         self.assertEqual(
-            container.calc_intent('teStiNg CapitalIzation')['conf'], 0.9)
+            container.calc_intent('teStiNg CapitalIzation')['conf'], 0.95)
 
     def test_multiple_entities(self):
         container = IntentContainer()
         container.add_intent('test3', ['I see {thing} (in|on) {place}'])
         self.assertEqual(
             container.calc_intent('I see a bin in there'),
-            {'conf': 1,
+            {'conf': 0.8,  # unregistered entity * 2
              'entities': {'place': 'there', 'thing': 'a bin'},
              'name': 'test3'}
         )
@@ -74,17 +79,37 @@ class TestIntentContainer(unittest.TestCase):
         container.add_intent('test', ['say *'])
         self.assertEqual(
             container.calc_intent('say something, whatever'),
-            {'conf': 0.85, 'entities': {}, 'name': 'test'})
+            {'conf': 0.85,  # wildcard
+             'entities': {}, 'name': 'test'})
 
     def test_typed_entities(self):
         container = IntentContainer()
         container.add_intent('test_int', ['* number {number:int}'])
         self.assertEqual(
-            container.calc_intent('i want number 3'),
-            {'conf': 0.85, 'entities': {'number': 3}, 'name': 'test_int'})
-        container.remove_intent("test_int")
-
-        container.add_intent('test_float', ['* number {number:float}'])
+            container.calc_intent('i want nuMBer 3'),
+            {'conf': 0.7,  # wildcard + unregistered entity + bad case
+             'entities': {'number': 3}, 'name': 'test_int'})
         self.assertEqual(
             container.calc_intent('i want number 3'),
-            {'conf': 0.85, 'entities': {'number': 3.0}, 'name': 'test_float'})
+            {'conf': 0.75,  # wildcard + unregistered entity
+             'entities': {'number': 3}, 'name': 'test_int'})
+
+        container.add_entity("number", ["1", "2", "3", "4", "5"])
+        self.assertEqual(
+            container.calc_intent('i want number 10'),
+            {'conf': 0.8,  # wildcard + unseen entity example
+             'entities': {'number': 10}, 'name': 'test_int'})
+        self.assertEqual(
+            container.calc_intent('i want number 3'),
+            {'conf': 0.85,  # wildcard + registered entity sample
+             'entities': {'number': 3}, 'name': 'test_int'})
+        self.assertEqual(
+            container.calc_intent('i want numBeR 3'),
+            {'conf': 0.8,  # wildcard + registered entity sample + bad case
+             'entities': {'number': 3}, 'name': 'test_int'})
+
+        container.add_intent('test_float', ['* float {number:float}'])
+        self.assertEqual(
+            container.calc_intent('i want float 3'),
+            {'conf': 0.8,   # wildcard + unseen entity example
+             'entities': {'number': 3.0}, 'name': 'test_float'})
