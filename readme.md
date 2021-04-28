@@ -30,7 +30,7 @@ container.add_intent('search', [
 ])
 container.add_entity('engine', ['abc', 'xyz'])
 container.calc_intent('find cats using xyz')
-# {'name': 'search', 'entities': {'query': 'cats', 'engine': 'xyz'}}
+# {'conf': 1.0, 'name': 'search', 'entities': {'query': 'cats', 'engine': 'xyz'}}
 
 ## wildcards syntax
 container.add_intent('say', ["say *"])
