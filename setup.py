@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='padacioso',
-    version='0.1.1',
+    version='0.1.2',
     packages=['padacioso'],
     url='https://github.com/OpenJarbas/padacioso',
     license='apache-2.0',
