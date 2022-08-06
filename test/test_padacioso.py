@@ -113,3 +113,53 @@ class TestIntentContainer(unittest.TestCase):
             container.calc_intent('i want float 3'),
             {'conf': 0.8,   # wildcard + unseen entity example
              'entities': {'number': 3.0}, 'name': 'test_float'})
+
+    def test_no_fuzz(self):
+        container = IntentContainer(fuzz=False)
+        container.add_intent('test', ['this is a test',
+                                      'test the intent',
+                                      'execute test'])
+        container.add_intent('test2', ['tell me about {thing}',
+                                       'what is {thing}'])
+        # exact match
+        intent = container.calc_intent("this is a test")
+        self.assertEqual(intent["name"], "test")
+
+        # regex match
+        intent = container.calc_intent("tell me about Mycroft")
+        self.assertEqual(intent["name"], "test2")
+        self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
+
+        # fuzzy match - failure case (no fuzz)
+        intent = container.calc_intent("this is test")
+        self.assertTrue(intent["name"] is None)
+
+        # fuzzy regex match - failure case (no fuzz)
+        intent = container.calc_intent("tell me everything about Mycroft")
+        self.assertTrue(intent["name"] is None)
+
+    def test_fuzz(self):
+        container = IntentContainer(fuzz=True)
+        container.add_intent('test', ['this is a test',
+                                      'test the intent',
+                                      'execute test'])
+        container.add_intent('test2', ['tell me about {thing}',
+                                       'what is {thing}'])
+        # exact match
+        intent = container.calc_intent("this is a test")
+        self.assertEqual(intent["name"], "test")
+
+        # regex match
+        intent = container.calc_intent("tell me about Mycroft")
+        self.assertEqual(intent["name"], "test2")
+        self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
+
+        # fuzzy match
+        intent = container.calc_intent("this is test")
+        self.assertEqual(intent["name"], "test")
+
+        # fuzzy regex match
+        intent = container.calc_intent("tell me everything about Mycroft")
+        self.assertEqual(intent["name"], "test2")
+        self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
+
