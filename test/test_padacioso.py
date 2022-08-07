@@ -7,22 +7,22 @@ class TestIntentContainer(unittest.TestCase):
     def test_one_of(self):
         container = IntentContainer()
         container.add_intent('hello', ["(hello|hi|hey) world"])
-        self.assertEqual(container.intent_samples["hello"],
-                         ['hello world', 'hi world', 'hey world'])
+        self.assertEqual(sorted(container.intent_samples["hello"]),
+                         sorted(['hello world', 'hi world', 'hey world']))
 
     def test_optionally(self):
         container = IntentContainer()
         container.add_intent('hello', ["hello (world|)"])
-        self.assertEqual(container.intent_samples["hello"],
-                         ['hello world', 'hello'])
+        self.assertEqual(sorted(container.intent_samples["hello"]),
+                         sorted(['hello world', 'hello']))
 
         container.add_intent('hey', ["hey [world]"])
-        self.assertEqual(container.intent_samples["hey"],
-                         ['hey world', 'hey'])
+        self.assertEqual(sorted(container.intent_samples["hey"]),
+                         sorted(['hey world', 'hey']))
 
         container.add_intent('hi', ["hi [{person}|people]"])
-        self.assertEqual(container.intent_samples["hi"],
-                         ['hi {person}', 'hi people', 'hi'])
+        self.assertEqual(sorted(container.intent_samples["hi"]),
+                         sorted(['hi {person}', 'hi people', 'hi']))
 
     # test intent parsing
     def test_intents(self):
