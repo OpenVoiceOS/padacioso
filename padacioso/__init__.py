@@ -32,12 +32,14 @@ class IntentContainer:
             del self.intent_samples[name]
 
     def add_entity(self, name, lines):
+        name = name.lower()
         expanded = []
         for l in lines:
             expanded += expand_parentheses(l)
         self.entity_samples[name] = expanded
 
     def remove_entity(self, name):
+        name = name.lower()
         if name in self.entity_samples:
             del self.entity_samples[name]
 
@@ -52,7 +54,10 @@ class IntentContainer:
 
                 entities = simplematch.match(r, query, case_sensitive=True)
                 if entities is not None:
-                    for k, v in entities.items():
+                    for k in set(entities.keys()):
+                        v = entities.pop(k)
+                        k = k.lower()
+                        entities[k] = v
                         if k not in self.entity_samples:
                             # penalize unregistered entities
                             penalty += 0.1
@@ -68,7 +73,10 @@ class IntentContainer:
                 if entities is not None:
                     # penalize case mismatch
                     penalty += 0.05
-                    for k, v in entities.items():
+                    for k in set(entities.keys()):
+                        v = entities.pop(k)
+                        k = k.lower()
+                        entities[k] = v
                         if k not in self.entity_samples:
                             # penalize unregistered entities
                             penalty += 0.1
@@ -85,6 +93,10 @@ class IntentContainer:
                     for f in self._get_fuzzed(r):
                         entities = simplematch.match(f, query, case_sensitive=False)
                         if entities is not None:
+                            for k in set(entities.keys()):
+                                v = entities.pop(k)
+                                k = k.lower()
+                                entities[k] = v
                             yield {"entities": entities or {},
                                    "conf": 1 - penalty,
                                    "name": intent_name}

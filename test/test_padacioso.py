@@ -70,7 +70,7 @@ class TestIntentContainer(unittest.TestCase):
 
     def test_multiple_entities(self):
         container = IntentContainer()
-        container.add_intent('test3', ['I see {thing} (in|on) {place}'])
+        container.add_intent('test3', ['I see {Thing} (in|on) {place}'])
         self.assertEqual(
             container.calc_intent('I see a bin in there'),
             {'conf': 0.8,  # unregistered entity * 2
