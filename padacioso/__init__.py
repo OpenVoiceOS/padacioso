@@ -1,6 +1,6 @@
 import simplematch
 import logging
-from padacioso.bracket_expansion import expand_parentheses
+from padacioso.bracket_expansion import expand_parentheses, clean_braces
 LOG = logging.getLogger('padacioso')
 
 
@@ -13,7 +13,7 @@ class IntentContainer:
     def add_intent(self, name, lines):
         expanded = []
         for l in lines:
-            expanded += expand_parentheses(l)
+            expanded += expand_parentheses(clean_braces(l))
         self.intent_samples[name] = list(set(expanded))
 
     def _get_fuzzed(self, sample):

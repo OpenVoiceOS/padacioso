@@ -37,7 +37,7 @@ class TestIntentContainer(unittest.TestCase):
             'milk', 'cheese'
         ])
         container.add_intent('drive', [
-            'drive me to {place}', 'take me to {place}', 'navigate to {place}'
+            'drive me to {{place}}', 'take me to {place}', 'navigate to {place}'
         ])
         container.add_intent('eat', [
             'eat {fruit}', 'eat some {fruit}', 'munch on (some|) {fruit}'
@@ -54,6 +54,10 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(container.calc_intent('eat some bananas'), {
             'name': 'eat', 'entities': {'fruit': 'bananas'},
             "conf": 0.9  # unregistered entity
+        })
+        self.assertEqual(container.calc_intent("drive me to the store"), {
+            'name': 'drive', 'entities': {'place': 'the store'},
+            'conf': 0.9
         })
 
     def test_case(self):
