@@ -185,3 +185,13 @@ def expand_parentheses(sent):
     """
     expanded = SentenceTreeParser(sent).expand_parentheses()
     return ["".join(_).strip() for _ in expanded]
+
+
+def clean_braces(example: str) -> str:
+    """
+    Normalizes {{entity}} to {entity}
+    @param example: utterance example to clean
+    @return: cleaned example
+    """
+    clean = example.replace('{{', '{').replace('}}', '}')
+    return clean
