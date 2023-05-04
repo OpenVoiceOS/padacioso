@@ -1,8 +1,12 @@
 import simplematch
-import logging
 
 from padacioso.bracket_expansion import expand_parentheses, clean_braces
-LOG = logging.getLogger('padacioso')
+
+try:
+    from ovos_utils.log import LOG
+except ImportError:
+    import logging
+    LOG = logging.getLogger('padacioso')
 
 
 class IntentContainer:
@@ -103,4 +107,5 @@ class IntentContainer:
         for entity in set(match['entities'].keys()):
             entities = match['entities'].pop(entity)
             match['entities'][entity.lower()] = entities
+        LOG.debug(match)
         return match
