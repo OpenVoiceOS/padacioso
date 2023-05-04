@@ -58,10 +58,10 @@ class IntentContainer:
                     for k, v in entities.items():
                         if k not in self.entity_samples:
                             # penalize unregistered entities
-                            penalty += 0.1
-                        elif str(v) not in self.entity_samples[k]:
-                            # penalize unknown samples
                             penalty += 0.05
+                        elif str(v) not in self.entity_samples[k]:
+                            # penalize parsed entity value not in samples
+                            penalty += 0.1
                     yield {"entities": entities or {},
                            "conf": 1 - penalty,
                            "name": intent_name}
@@ -74,10 +74,10 @@ class IntentContainer:
                     for k, v in entities.items():
                         if k not in self.entity_samples:
                             # penalize unregistered entities
-                            penalty += 0.1
-                        elif str(v) not in self.entity_samples[k]:
-                            # penalize unknown samples
                             penalty += 0.05
+                        elif str(v) not in self.entity_samples[k]:
+                            # penalize parsed entity value not in samples
+                            penalty += 0.1
                     yield {"entities": entities or {},
                            "conf": 1 - penalty,
                            "name": intent_name}
@@ -86,7 +86,8 @@ class IntentContainer:
                 if self.fuzz:
                     penalty += 0.25
                     for f in self._get_fuzzed(r):
-                        entities = simplematch.match(f, query, case_sensitive=False)
+                        entities = simplematch.match(f, query,
+                                                     case_sensitive=False)
                         if entities is not None:
                             yield {"entities": entities or {},
                                    "conf": 1 - penalty,
@@ -99,7 +100,6 @@ class IntentContainer:
             key=lambda x: x["conf"],
             default={'name': None, 'entities': {}}
         )
-        LOG.debug(match)
         for entity in set(match['entities'].keys()):
             entities = match['entities'].pop(entity)
             match['entities'][entity.lower()] = entities
