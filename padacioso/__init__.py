@@ -1,9 +1,9 @@
 import simplematch
 import logging
 
-import time
 from padacioso.bracket_expansion import expand_parentheses, clean_braces
 LOG = logging.getLogger('padacioso')
+
 
 class IntentContainer:
     def __init__(self, fuzz=False):
@@ -99,6 +99,7 @@ class IntentContainer:
             key=lambda x: x["conf"],
             default={'name': None, 'entities': {}}
         )
+        LOG.debug(match)
         for entity in set(match['entities'].keys()):
             entities = match['entities'].pop(entity)
             match['entities'][entity.lower()] = entities
