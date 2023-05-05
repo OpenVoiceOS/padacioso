@@ -1,7 +1,12 @@
 import simplematch
-import logging
-from padacioso.bracket_expansion import expand_parentheses
-LOG = logging.getLogger('padacioso')
+
+from padacioso.bracket_expansion import expand_parentheses, clean_braces
+
+try:
+    from ovos_utils.log import LOG
+except ImportError:
+    import logging
+    LOG = logging.getLogger('padacioso')
 
 
 class IntentContainer:
@@ -13,7 +18,7 @@ class IntentContainer:
     def add_intent(self, name, lines):
         expanded = []
         for l in lines:
-            expanded += expand_parentheses(l)
+            expanded += expand_parentheses(clean_braces(l))
         self.intent_samples[name] = list(set(expanded))
 
     def _get_fuzzed(self, sample):
@@ -32,12 +37,14 @@ class IntentContainer:
             del self.intent_samples[name]
 
     def add_entity(self, name, lines):
+        name = name.lower()
         expanded = []
         for l in lines:
             expanded += expand_parentheses(l)
         self.entity_samples[name] = expanded
 
     def remove_entity(self, name):
+        name = name.lower()
         if name in self.entity_samples:
             del self.entity_samples[name]
 
@@ -55,10 +62,10 @@ class IntentContainer:
                     for k, v in entities.items():
                         if k not in self.entity_samples:
                             # penalize unregistered entities
-                            penalty += 0.1
+                            penalty += 0.04
                         elif str(v) not in self.entity_samples[k]:
-                            # penalize unknown samples
-                            penalty += 0.05
+                            # penalize parsed entity value not in samples
+                            penalty += 0.1
                     yield {"entities": entities or {},
                            "conf": 1 - penalty,
                            "name": intent_name}
@@ -71,10 +78,10 @@ class IntentContainer:
                     for k, v in entities.items():
                         if k not in self.entity_samples:
                             # penalize unregistered entities
-                            penalty += 0.1
-                        elif str(v) not in self.entity_samples[k]:
-                            # penalize unknown samples
                             penalty += 0.05
+                        elif str(v) not in self.entity_samples[k]:
+                            # penalize parsed entity value not in samples
+                            penalty += 0.1
                     yield {"entities": entities or {},
                            "conf": 1 - penalty,
                            "name": intent_name}
@@ -83,7 +90,8 @@ class IntentContainer:
                 if self.fuzz:
                     penalty += 0.25
                     for f in self._get_fuzzed(r):
-                        entities = simplematch.match(f, query, case_sensitive=False)
+                        entities = simplematch.match(f, query,
+                                                     case_sensitive=False)
                         if entities is not None:
                             yield {"entities": entities or {},
                                    "conf": 1 - penalty,
@@ -91,8 +99,13 @@ class IntentContainer:
                             break
 
     def calc_intent(self, query):
-        return max(
+        match = max(
             self.calc_intents(query),
             key=lambda x: x["conf"],
             default={'name': None, 'entities': {}}
         )
+        for entity in set(match['entities'].keys()):
+            entities = match['entities'].pop(entity)
+            match['entities'][entity.lower()] = entities
+        LOG.debug(match)
+        return match
