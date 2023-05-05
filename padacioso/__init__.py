@@ -62,7 +62,7 @@ class IntentContainer:
                     for k, v in entities.items():
                         if k not in self.entity_samples:
                             # penalize unregistered entities
-                            penalty += 0.05
+                            penalty += 0.04
                         elif str(v) not in self.entity_samples[k]:
                             # penalize parsed entity value not in samples
                             penalty += 0.1
