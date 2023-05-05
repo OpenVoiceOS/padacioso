@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.1.3a1](https://github.com/OpenVoiceOS/padacioso/tree/0.1.3a1) (2023-05-03)
+## [0.1.3a2](https://github.com/OpenVoiceOS/padacioso/tree/0.1.3a2) (2023-05-05)
 
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.1.1...0.1.3a1)
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.1.3a1...0.1.3a2)
+
+**Merged pull requests:**
+
+- Optimization and Confidence Adjustments [\#7](https://github.com/OpenVoiceOS/padacioso/pull/7) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.1.3a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.1.3a1) (2023-05-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.1.1...V0.1.3a1)
 
 **Fixed bugs:**
 
