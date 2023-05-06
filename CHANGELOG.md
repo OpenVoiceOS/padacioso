@@ -1,29 +1,12 @@
 # Changelog
 
-## [V0.1.3a2](https://github.com/OpenVoiceOS/padacioso/tree/V0.1.3a2) (2023-05-05)
+## [0.2.1a1](https://github.com/OpenVoiceOS/padacioso/tree/0.2.1a1) (2023-05-06)
 
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.1.3a1...V0.1.3a2)
-
-**Merged pull requests:**
-
-- Optimization and Confidence Adjustments [\#7](https://github.com/OpenVoiceOS/padacioso/pull/7) ([NeonDaniel](https://github.com/NeonDaniel))
-
-## [V0.1.3a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.1.3a1) (2023-05-03)
-
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.1.1...V0.1.3a1)
-
-**Fixed bugs:**
-
-- Lowercase entity names in intent matches for backwards-compat. [\#5](https://github.com/OpenVoiceOS/padacioso/pull/5) ([NeonDaniel](https://github.com/NeonDaniel))
-- Normalize braces around entities for compat with existing intents [\#4](https://github.com/OpenVoiceOS/padacioso/pull/4) ([NeonDaniel](https://github.com/NeonDaniel))
-
-**Closed issues:**
-
-- Normalize entities for compat. [\#3](https://github.com/OpenVoiceOS/padacioso/issues/3)
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.0...0.2.1a1)
 
 **Merged pull requests:**
 
-- Automate releases and Update tests [\#6](https://github.com/OpenVoiceOS/padacioso/pull/6) ([NeonDaniel](https://github.com/NeonDaniel))
+- add package data [\#9](https://github.com/OpenVoiceOS/padacioso/pull/9) ([emphasize](https://github.com/emphasize))
 
 
 
