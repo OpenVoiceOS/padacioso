@@ -50,6 +50,7 @@ setup(
     name='padacioso',
     version=get_version(),
     packages=['padacioso'],
+    package_data={'': package_files('padacioso')},
     url='https://github.com/OpenVoiceOS/padacioso',
     license='apache-2.0',
     author='jarbasai',
