@@ -167,3 +167,39 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(intent["name"], "test2")
         self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
 
+    def test_add_remove_intent(self):
+        container = IntentContainer()
+        # Add intent valid
+        container.add_intent("hello", ["hi", "hello", "howdy",
+                                       "how (are you|do you do)"])
+        self.assertEqual(len(container.intent_samples['hello']), 5)
+        self.assertEqual(len(container._cased_matchers), 5)
+        self.assertEqual(len(container._cased_matchers),
+                         len(container._uncased_matchers))
+        # Add intent already defined
+        with self.assertRaises(RuntimeError):
+            container.add_intent("hello", ["invalid"])
+        # Add second intent
+        container.add_intent("test", ["test(ing|)"])
+        self.assertEqual(len(container.intent_samples['test']), 2)
+        self.assertEqual(len(container._cased_matchers),
+                         len(container._uncased_matchers))
+        # Remove intent
+        container.remove_intent("test")
+        self.assertNotIn("test", container.intent_samples)
+        self.assertEqual(len(container.intent_samples['hello']), 5)
+        self.assertEqual(len(container._cased_matchers), 5)
+        self.assertEqual(len(container._cased_matchers),
+                         len(container._uncased_matchers))
+
+    def test_add_remove_entity(self):
+        container = IntentContainer()
+        # Add entity valid
+        container.add_entity("entity", ["test(ing|)", "another test"])
+        self.assertEqual(len(container.entity_samples["entity"]), 3)
+        # Add entity already defined
+        with self.assertRaises(RuntimeError):
+            container.add_entity("entity", ["invalid"])
+        # Remove entity
+        container.remove_entity("entity")
+        self.assertNotIn("entity", container.entity_samples.keys())

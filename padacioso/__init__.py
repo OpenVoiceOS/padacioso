@@ -13,7 +13,7 @@ except ImportError:
 class IntentContainer:
     def __init__(self, fuzz=False):
         self.intent_samples, self.entity_samples = {}, {}
-        self.intents, self.entities = {}, {}
+        # self.intents, self.entities = {}, {}
         self.fuzz = fuzz
         self._cased_matchers = dict()
         self._uncased_matchers = dict()
@@ -42,6 +42,9 @@ class IntentContainer:
         @param name: name of intent to add
         @param lines: list of intent regexes
         """
+        if name in self.intent_samples:
+            raise RuntimeError(f"Attempted to re-register existing intent: "
+                               f"{name}")
         expanded = []
         for l in lines:
             expanded += expand_parentheses(clean_braces(l))
@@ -73,6 +76,9 @@ class IntentContainer:
         @param name: name of entity to add
         @param lines: list of entity examples
         """
+        if name in self.entity_samples:
+            raise RuntimeError(f"Attempted to re-register existing entity: "
+                               f"{name}")
         name = name.lower()
         expanded = []
         for l in lines:
