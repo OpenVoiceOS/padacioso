@@ -46,6 +46,7 @@ class IntentContainer:
         for l in lines:
             expanded += expand_parentheses(clean_braces(l))
         regexes = list(set(expanded))
+        regexes.sort(key=len, reverse=True)
         self.intent_samples[name] = regexes
         for r in regexes:
             self._cased_matchers[r] = \
@@ -94,7 +95,6 @@ class IntentContainer:
         @return: yields dict intent matches
         """
         for intent_name, regexes in self.intent_samples.items():
-            regexes = sorted(regexes, key=len, reverse=True)
             for r in regexes:
                 penalty = 0
                 if "*" in r:
