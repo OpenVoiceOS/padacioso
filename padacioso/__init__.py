@@ -45,7 +45,13 @@ class IntentContainer:
         expanded = []
         for l in lines:
             expanded += expand_parentheses(clean_braces(l))
-        self.intent_samples[name] = list(set(expanded))
+        regexes = list(set(expanded))
+        self.intent_samples[name] = regexes
+        for r in regexes:
+            self._cased_matchers[r] = \
+                simplematch.Matcher(r, case_sensitive=True)
+            self._uncased_matchers[r] = \
+                simplematch.Matcher(r, case_sensitive=False)
 
     def remove_intent(self, name: str):
         """
@@ -95,6 +101,7 @@ class IntentContainer:
                     # penalize wildcards
                     penalty = 0.15
                 if r not in self._cased_matchers:
+                    LOG.warning(f"{r} not initialized")
                     self._cased_matchers[r] = \
                         simplematch.Matcher(r, case_sensitive=True)
                 entities = self._cased_matchers[r].match(query)
@@ -112,6 +119,7 @@ class IntentContainer:
                     break
 
                 if r not in self._uncased_matchers:
+                    LOG.warning(f"{r} not initialized")
                     self._uncased_matchers[r] = \
                         simplematch.Matcher(r, case_sensitive=False)
                 entities = self._uncased_matchers[r].match(query)
@@ -131,6 +139,7 @@ class IntentContainer:
                     break
 
                 if self.fuzz:
+                    LOG.debug(f"Fallback to fuzzy match")
                     penalty += 0.25
                     for f in self._get_fuzzed(r):
                         entities = simplematch.match(f, query,
