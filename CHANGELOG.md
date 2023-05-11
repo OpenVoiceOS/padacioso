@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.2.1a1](https://github.com/OpenVoiceOS/padacioso/tree/0.2.1a1) (2023-05-06)
+## [0.2.1a2](https://github.com/OpenVoiceOS/padacioso/tree/0.2.1a2) (2023-05-11)
 
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.0...0.2.1a1)
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a1...0.2.1a2)
+
+**Merged pull requests:**
+
+- Optimize intent matching [\#10](https://github.com/OpenVoiceOS/padacioso/pull/10) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.2.1a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a1) (2023-05-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.0...V0.2.1a1)
 
 **Merged pull requests:**
 
