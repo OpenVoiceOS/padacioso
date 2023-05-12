@@ -1,7 +1,7 @@
 import simplematch
 
 from typing import List, Iterator, Optional
-from padacioso.bracket_expansion import expand_parentheses, clean_braces
+from padacioso.bracket_expansion import expand_parentheses, normalize_example
 
 try:
     from ovos_utils.log import LOG
@@ -17,6 +17,10 @@ class IntentContainer:
         self.fuzz = fuzz
         self._cased_matchers = dict()
         self._uncased_matchers = dict()
+
+        if "word" not in simplematch.types:
+            LOG.debug(f"Registering `word` type")
+            _init_sm_word_type()
 
     @staticmethod
     def _get_fuzzed(sample: str) -> List[str]:
@@ -47,7 +51,7 @@ class IntentContainer:
                                f"{name}")
         expanded = []
         for l in lines:
-            expanded += expand_parentheses(clean_braces(l))
+            expanded += expand_parentheses(normalize_example(l))
         regexes = list(set(expanded))
         regexes.sort(key=len, reverse=True)
         self.intent_samples[name] = regexes
@@ -172,3 +176,11 @@ class IntentContainer:
             match['entities'][entity.lower()] = entities
         LOG.debug(match)
         return match
+
+
+def _init_sm_word_type():
+    """
+    Registers a `word` type with SimpleMatch to support Padatious `:0` syntax
+    """
+    regex = r"[a-zA-Z0-9]+"
+    simplematch.register_type("word", regex)

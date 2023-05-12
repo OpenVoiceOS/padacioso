@@ -195,3 +195,24 @@ def clean_braces(example: str) -> str:
     """
     clean = example.replace('{{', '{').replace('}}', '}')
     return clean
+
+
+def translate_padatious(example: str) -> str:
+    """
+    Translate Padatious `:0` syntax to standard regex
+    @param example: input intent example
+    @return: parsed intent example with Padatious syntax replaced with regex
+    """
+    if ':0' not in example:
+        return example
+    tokens = example.split()
+    i = 0
+    for idx, token in enumerate(tokens):
+        if token == ":0":
+            tokens[idx] = '{' + f'word{i}:word' + '}'
+            i += 1
+    return " ".join(tokens)
+
+
+def normalize_example(example: str) -> str:
+    return clean_braces(translate_padatious(example))
