@@ -1,5 +1,9 @@
 # Changelog
 
+## [V0.2.1a3](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a3) (2023-05-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a2...V0.2.1a3)
+
 ## [V0.2.1a2](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a2) (2023-05-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a1...V0.2.1a2)
