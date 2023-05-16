@@ -203,3 +203,29 @@ class TestIntentContainer(unittest.TestCase):
         # Remove entity
         container.remove_entity("entity")
         self.assertNotIn("entity", container.entity_samples.keys())
+
+    def test_translate_padatious(self):
+        from padacioso.bracket_expansion import translate_padatious
+        intent = ":0 :0 what time is it"
+        self.assertEqual(translate_padatious(intent),
+                         "{word0:word} {word1:word} what time is it")
+
+    def test_add_padatious_wildcard_intent(self):
+        container = IntentContainer()
+        container.add_intent("test_single_wildcard", [":0 what time is it"])
+        match = container.calc_intent("neon what time is it")
+        self.assertEqual(match['name'], 'test_single_wildcard')
+        self.assertEqual(match['entities']['word0'], 'neon')
+
+        match = container.calc_intent("neon neon what time is it")
+        self.assertIsNone(match['name'])
+
+        container.add_intent("test_double_wildcard", [":0 :0 how are you"])
+        match = container.calc_intent("neon how are you")
+        self.assertIsNone(match['name'])
+
+        match = container.calc_intent("neon neon how are you")
+        self.assertEqual(match['name'], 'test_double_wildcard')
+        self.assertEqual(match['entities']['word0'], 'neon')
+        self.assertEqual(match['entities']['word1'], 'neon')
+
