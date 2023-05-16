@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.1a5](https://github.com/OpenVoiceOS/padacioso/tree/0.2.1a5) (2023-05-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a4...0.2.1a5)
+
+**Implemented enhancements:**
+
+- Adds support for Padatious `:0` syntax with unit tests [\#12](https://github.com/OpenVoiceOS/padacioso/pull/12) ([NeonDaniel](https://github.com/NeonDaniel))
+
+**Closed issues:**
+
+- Handle `:0` as `*` [\#11](https://github.com/OpenVoiceOS/padacioso/issues/11)
+
+## [V0.2.1a4](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a4) (2023-05-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a3...V0.2.1a4)
+
 ## [V0.2.1a3](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a3) (2023-05-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a2...V0.2.1a3)
