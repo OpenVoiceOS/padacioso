@@ -149,7 +149,6 @@ class IntentContainer:
                     break
 
                 if self.fuzz:
-                    LOG.debug(f"Fallback to fuzzy match")
                     penalty += 0.25
                     for f in self._get_fuzzed(r):
                         entities = simplematch.match(f, query,
