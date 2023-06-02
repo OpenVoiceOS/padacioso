@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.2.1a5](https://github.com/OpenVoiceOS/padacioso/tree/0.2.1a5) (2023-05-16)
+## [0.2.1a6](https://github.com/OpenVoiceOS/padacioso/tree/0.2.1a6) (2023-06-02)
 
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a4...0.2.1a5)
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a5...0.2.1a6)
+
+**Fixed bugs:**
+
+- remove spam LOG [\#14](https://github.com/OpenVoiceOS/padacioso/pull/14) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.2.1a5](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a5) (2023-05-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a4...V0.2.1a5)
 
 **Implemented enhancements:**
 
