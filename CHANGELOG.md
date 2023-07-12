@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.2.1a7](https://github.com/OpenVoiceOS/padacioso/tree/0.2.1a7) (2023-07-12)
+## [0.2.1a8](https://github.com/OpenVoiceOS/padacioso/tree/0.2.1a8) (2023-07-12)
 
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a6...0.2.1a7)
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a7...0.2.1a8)
+
+**Implemented enhancements:**
+
+- feat/disambiguation [\#18](https://github.com/OpenVoiceOS/padacioso/pull/18) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.2.1a7](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a7) (2023-07-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a6...V0.2.1a7)
 
 **Implemented enhancements:**
 
