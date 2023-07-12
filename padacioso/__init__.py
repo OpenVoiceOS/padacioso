@@ -224,16 +224,16 @@ class IntentContainer:
         ties = [i for i in intents if i.get("conf", 0) == best_conf]
 
         if len(ties) > 1:
-            print(f"tied intents: {ties}")
+            LOG.debug(f"tied intents: {ties}")
             no_entities = [i for i in intents if not i.get("entities")]
             entities = [i for i in intents if i.get("entities")]
             if entities and no_entities:
-                print(f"excluding {entities}")
+                LOG.debug(f"excluding {entities}")
                 ties = no_entities  # prefer more strict regexes
 
         if len(ties) > 1:
             # TODO - how to untie?
-            print(f"tied intents: {ties}")
+            LOG.info(f"tied intents: {ties}")
 
         match = ties[0]
 
