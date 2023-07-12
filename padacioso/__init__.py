@@ -173,9 +173,19 @@ class IntentContainer:
 
                 for s in self._get_fuzzed(r):
                     entities = simplematch.match(s, query, case_sensitive=False)
+                    fuzzy_penalty = penalty
+                    if "*" in s:  # very loose regex
+                        fuzzy_penalty += 0.1
+                    if "{" in s:  # capture group
+                        fuzzy_penalty += 0.05
+
+                    # depending on length
+                    diff = max(len(s) - len(query), 0)
+                    fuzzy_penalty += diff * 0.01
+
                     if entities is not None:
                         return {"entities": entities or {},
-                                "conf": 1 - penalty,
+                                "conf": max(1 - fuzzy_penalty, 0),
                                 "name": intent_name}
 
     def calc_intents(self, query: str) -> Iterator[dict]:
@@ -204,11 +214,29 @@ class IntentContainer:
         @param query: input to evaluate for an intent
         @return: dict matched intent (or None)
         """
-        match = max(
-            self.calc_intents(query),
-            key=lambda x: x["conf"],
-            default={'name': None, 'entities': {}}
-        )
+        match = {'name': None, 'entities': {}}
+        intents = [i for i in self.calc_intents(query) if i is not None and i.get("name")]
+        if len(intents) == 0:
+            LOG.info("No match")
+            return match
+
+        best_conf = max(x.get("conf", 0) for x in intents if x.get("name"))
+        ties = [i for i in intents if i.get("conf", 0) == best_conf]
+
+        if len(ties) > 1:
+            print(f"tied intents: {ties}")
+            no_entities = [i for i in intents if not i.get("entities")]
+            entities = [i for i in intents if i.get("entities")]
+            if entities and no_entities:
+                print(f"excluding {entities}")
+                ties = no_entities  # prefer more strict regexes
+
+        if len(ties) > 1:
+            # TODO - how to untie?
+            print(f"tied intents: {ties}")
+
+        match = ties[0]
+
         for entity in set(match['entities'].keys()):
             entities = match['entities'].pop(entity)
             match['entities'][entity.lower()] = entities
