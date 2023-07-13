@@ -20,4 +20,4 @@ jobs:
           token: ${{ secrets.MATRIX_TOKEN }}
           channel: '!WjxEKjjINpyBRPFgxl:krbel.duckdns.org'
           message: |
-            new padacioso PR merged! https://github.com/OpenVoiceOS/ovos_utils/pull/${{ github.event.number }}
+            new padacioso PR merged! https://github.com/OpenVoiceOS/padacioso/pull/${{ github.event.number }}
