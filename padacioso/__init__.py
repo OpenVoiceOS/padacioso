@@ -7,10 +7,22 @@ from padacioso.bracket_expansion import expand_parentheses, normalize_example
 
 try:
     from ovos_utils.log import LOG
+    from ovos_utils.parse import fuzzy_match  # uses rapidfuzz for performance
 except ImportError:
     import logging
 
     LOG = logging.getLogger('padacioso')
+
+    from difflib import SequenceMatcher
+
+
+    def fuzzy_match(x, against):
+        """Perform a 'fuzzy' comparison between two strings.
+        Returns:
+            float: match percentage -- 1.0 for perfect match,
+                   down to 0.0 for no match at all.
+        """
+        return SequenceMatcher(None, x, against).ratio()
 
 
 class IntentContainer:
@@ -168,25 +180,33 @@ class IntentContainer:
                         "conf": 1 - penalty,
                         "name": intent_name}
 
-            if self.fuzz:
-                penalty += 0.25
-
+        if self.fuzz:
+            for r in regexes:
+                penalty = 0.25
                 for s in self._get_fuzzed(r):
-                    entities = simplematch.match(s, query, case_sensitive=False)
-                    fuzzy_penalty = penalty
-                    if "*" in s:  # very loose regex
-                        fuzzy_penalty += 0.1
-                    if "{" in s:  # capture group
-                        fuzzy_penalty += 0.05
+                    entities = self._fuzzy_score(query, s, penalty)
+                    if entities:
+                        entities["name"] = intent_name
+                        return entities
 
-                    # depending on length
-                    diff = max(len(s) - len(query), 0)
-                    fuzzy_penalty += diff * 0.01
+    def _fuzzy_score(self, query, s, penalty=0.25):
+        entities = simplematch.match(s, query, case_sensitive=False)
 
-                    if entities is not None:
-                        return {"entities": entities or {},
-                                "conf": max(1 - fuzzy_penalty, 0),
-                                "name": intent_name}
+        fuzzy_penalty = penalty
+        if "*" in s:  # very loose regex
+            fuzzy_penalty += 0.1
+        if "{" in s:  # capture group
+            fuzzy_penalty += 0.05
+        # depending on length
+        diff = max(len(s) - len(query), 0)
+        fuzzy_penalty += diff * 0.01
+        base_score = 1 - max(1 - fuzzy_penalty, 0)
+        fuzzy_score = fuzzy_match(s, query)
+        score = (fuzzy_score + base_score) / 2
+
+        if entities is not None:
+            return {"entities": entities or {},
+                    "conf": (fuzzy_score + base_score) / 2}
 
     def calc_intents(self, query: str) -> Iterator[dict]:
         """
@@ -222,14 +242,6 @@ class IntentContainer:
 
         best_conf = max(x.get("conf", 0) for x in intents if x.get("name"))
         ties = [i for i in intents if i.get("conf", 0) == best_conf]
-
-        if len(ties) > 1:
-            LOG.debug(f"tied intents: {ties}")
-            no_entities = [i for i in intents if not i.get("entities")]
-            entities = [i for i in intents if i.get("entities")]
-            if entities and no_entities:
-                LOG.debug(f"excluding {entities}")
-                ties = no_entities  # prefer more strict regexes
 
         if len(ties) > 1:
             # TODO - how to untie?
