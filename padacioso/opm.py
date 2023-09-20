@@ -93,17 +93,13 @@ class PadaciosoPipelinePlugin(IntentPipelinePlugin):
         min_conf = min_conf or self.config.get("min_conf", 0.35)
         utterance = utterance.strip().lower()
         with self.lock:
-            intent = container.calc_intent(utterance).__dict__
+            intent = container.calc_intent(utterance)
         if intent["conf"] < min_conf:
             return None
-
-        if isinstance(intent["utterance"], list):
-            intent["utterance"] = " ".join(intent["utterance"])
-
         intent_type, skill_id = _unmunge(intent["intent_type"])
         return IntentMatch(intent_service=self.matcher_id,
                            intent_type=intent_type,
-                           intent_data=intent.pop("entities"),
+                           intent_data=intent.get("entities", {}),
                            confidence=intent["conf"],
                            utterance=utterance,
                            skill_id=skill_id)
