@@ -46,6 +46,10 @@ def required(requirements_file):
         return [pkg for pkg in requirements
                 if pkg.strip() and not pkg.startswith("#")]
 
+
+PLUGIN_ENTRY_POINT = 'ovos-intent-plugin-padacioso=padacioso.opm:PadaciosoPipelinePlugin'
+
+
 setup(
     name='padacioso',
     version=get_version(),
@@ -56,5 +60,6 @@ setup(
     author='jarbasai',
     author_email='jarbasai@mailfence.com',
     install_requires=required("requirements.txt"),
-    description='dead simple intent parser'
+    description='dead simple intent parser',
+    entry_points={'ovos.pipeline': PLUGIN_ENTRY_POINT}
 )
