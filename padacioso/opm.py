@@ -76,7 +76,7 @@ class PadaciosoPipelinePlugin(IntentPipelinePlugin):
         container = self._get_engine(lang)
         samples = samples or [entity_name]
         with self.lock:
-            container.add_entity(entity_name, samples)
+            container.add_entity(_munge(entity_name, skill_id), samples)
 
     def register_intent(self, skill_id, intent_name, samples=None, lang=None):
         lang = lang or self.lang
@@ -86,21 +86,6 @@ class PadaciosoPipelinePlugin(IntentPipelinePlugin):
         intent_name = _munge(intent_name, skill_id)
         with self.lock:
             container.add_intent(intent_name, samples)
-
-    def register_entity_from_file(self, skill_id, entity_name, file_name, lang=None):
-        lang = lang or self.lang
-        container = self._get_engine(lang)
-        super().register_entity_from_file(skill_id, entity_name, file_name, lang)
-        with self.lock:
-            container.load_entity(entity_name, file_name)
-
-    def register_intent_from_file(self, skill_id, intent_name, file_name, lang=None):
-        lang = lang or self.lang
-        container = self._get_engine(lang)
-        super().register_intent_from_file(skill_id, intent_name, file_name, lang)
-        intent_name = _munge(intent_name, skill_id)
-        with self.lock:
-            container.load_intent(intent_name, file_name)
 
     def calc_intent(self, utterance, min_conf=0.0, lang=None):
         lang = lang or self.lang
