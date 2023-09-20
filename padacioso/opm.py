@@ -43,15 +43,32 @@ class PadaciosoPipelinePlugin(IntentPipelinePlugin):
         return self.engines[lang]
 
     def detach_intent(self, skill_id, intent_name):
-        for intent in self.registered_intents:
-            if intent.name != intent_name or intent.skill_id != skill_id:
-                continue
-            LOG.debug("Detaching padacioso intent: " + intent_name)
-            with self.lock:
-                munged = _munge(intent.name, intent.skill_id)
-                for lang in self.engines:
+        LOG.debug("Detaching padacioso intent: " + intent_name)
+        with self.lock:
+            munged = _munge(intent_name, skill_id)
+            for lang in self.engines:
+                self.engines[lang].remove_intent(munged)
+        super().detach_intent(skill_id, intent_name)
+
+    def detach_entity(self, skill_id, entity_name):
+        LOG.debug("Detaching padacioso entity: " + entity_name)
+        with self.lock:
+            munged = _munge(entity_name, skill_id)
+            for lang in self.engines:
+                self.engines[lang].remove_entity(munged)
+        super().detach_entity(skill_id, entity_name)
+
+    def detach_skill(self, skill_id):
+        LOG.debug("Detaching padacioso skill: " + skill_id)
+        with self.lock:
+            for lang in self.engines:
+                for entity in (e for e in self.registered_entities if e.skill_id == skill_id):
+                    munged = _munge(entity.name, skill_id)
+                    self.engines[lang].remove_entity(munged)
+                for intent in (e for e in self.registered_intents if e.skill_id == skill_id):
+                    munged = _munge(intent.name, skill_id)
                     self.engines[lang].remove_intent(munged)
-        super().detach_intent(intent_name)
+        super().detach_skill(skill_id)
 
     def register_entity(self, skill_id, entity_name, samples=None, lang=None):
         lang = lang or self.lang
