@@ -167,3 +167,65 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(intent["name"], "test2")
         self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
 
+    def test_add_remove_intent(self):
+        container = IntentContainer()
+        # Add intent valid
+        container.add_intent("hello", ["hi", "hello", "howdy",
+                                       "how (are you|do you do)"])
+        self.assertEqual(len(container.intent_samples['hello']), 5)
+        self.assertEqual(len(container._cased_matchers), 5)
+        self.assertEqual(len(container._cased_matchers),
+                         len(container._uncased_matchers))
+        # Add intent already defined
+        with self.assertRaises(RuntimeError):
+            container.add_intent("hello", ["invalid"])
+        # Add second intent
+        container.add_intent("test", ["test(ing|)"])
+        self.assertEqual(len(container.intent_samples['test']), 2)
+        self.assertEqual(len(container._cased_matchers),
+                         len(container._uncased_matchers))
+        # Remove intent
+        container.remove_intent("test")
+        self.assertNotIn("test", container.intent_samples)
+        self.assertEqual(len(container.intent_samples['hello']), 5)
+        self.assertEqual(len(container._cased_matchers), 5)
+        self.assertEqual(len(container._cased_matchers),
+                         len(container._uncased_matchers))
+
+    def test_add_remove_entity(self):
+        container = IntentContainer()
+        # Add entity valid
+        container.add_entity("entity", ["test(ing|)", "another test"])
+        self.assertEqual(len(container.entity_samples["entity"]), 3)
+        # Add entity already defined
+        with self.assertRaises(RuntimeError):
+            container.add_entity("entity", ["invalid"])
+        # Remove entity
+        container.remove_entity("entity")
+        self.assertNotIn("entity", container.entity_samples.keys())
+
+    def test_translate_padatious(self):
+        from padacioso.bracket_expansion import translate_padatious
+        intent = ":0 :0 what time is it"
+        self.assertEqual(translate_padatious(intent),
+                         "{word0:word} {word1:word} what time is it")
+
+    def test_add_padatious_wildcard_intent(self):
+        container = IntentContainer()
+        container.add_intent("test_single_wildcard", [":0 what time is it"])
+        match = container.calc_intent("neon what time is it")
+        self.assertEqual(match['name'], 'test_single_wildcard')
+        self.assertEqual(match['entities']['word0'], 'neon')
+
+        match = container.calc_intent("neon neon what time is it")
+        self.assertIsNone(match['name'])
+
+        container.add_intent("test_double_wildcard", [":0 :0 how are you"])
+        match = container.calc_intent("neon how are you")
+        self.assertIsNone(match['name'])
+
+        match = container.calc_intent("neon neon how are you")
+        self.assertEqual(match['name'], 'test_double_wildcard')
+        self.assertEqual(match['entities']['word0'], 'neon')
+        self.assertEqual(match['entities']['word1'], 'neon')
+
