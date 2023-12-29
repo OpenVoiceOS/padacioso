@@ -1,8 +1,8 @@
 # Changelog
 
-## [0.2.1a9](https://github.com/OpenVoiceOS/padacioso/tree/0.2.1a9) (2023-07-13)
+## [V0.2.1a9](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a9) (2023-07-13)
 
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a8...0.2.1a9)
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a8...V0.2.1a9)
 
 **Fixed bugs:**
 
