@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.2.2a1](https://github.com/OpenVoiceOS/padacioso/tree/0.2.2a1) (2024-07-20)
+## [0.2.2a2](https://github.com/OpenVoiceOS/padacioso/tree/0.2.2a2) (2024-10-14)
 
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1...0.2.2a1)
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.2a1...0.2.2a2)
+
+**Merged pull requests:**
+
+- feat:semver [\#23](https://github.com/OpenVoiceOS/padacioso/pull/23) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.2.2a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.2a1) (2024-07-20)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1...V0.2.2a1)
 
 **Implemented enhancements:**
 
