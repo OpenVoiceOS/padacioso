@@ -4,11 +4,13 @@ from functools import lru_cache
 from os.path import isfile
 from typing import List, Optional
 
+from langcodes import closest_match
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import PipelinePlugin, IntentMatch
 from ovos_utils import flatten_list
+from ovos_utils.lang import standardize_lang_tag
 from ovos_utils.log import LOG
 
 from padacioso import IntentContainer as FallbackIntentContainer
@@ -53,11 +55,11 @@ class PadaciosoPipeline(PipelinePlugin):
         self.bus = bus
 
         core_config = Configuration()
-        self.lang = core_config.get("lang", "en-us")
+        self.lang = standardize_lang_tag(core_config.get("lang", "en-US"))
         langs = core_config.get('secondary_langs') or []
         if self.lang not in langs:
             langs.append(self.lang)
-
+        langs = [standardize_lang_tag(l) for l in langs]
         self.conf_high = self.padacioso_config.get("conf_high") or 0.95
         self.conf_med = self.padacioso_config.get("conf_med") or 0.8
         self.conf_low = self.padacioso_config.get("conf_low") or 0.5
@@ -89,7 +91,7 @@ class PadaciosoPipeline(PipelinePlugin):
         LOG.debug(f'Padacioso Matching confidence > {limit}')
         # call flatten in case someone is sending the old style list of tuples
         utterances = flatten_list(utterances)
-        lang = lang or self.lang
+        lang = standardize_lang_tag(lang or self.lang)
         padacioso_intent = self.calc_intent(utterances, lang, message)
         if padacioso_intent is not None and padacioso_intent.conf > limit:
             skill_id = padacioso_intent.name.split(':')[0]
@@ -199,7 +201,7 @@ class PadaciosoPipeline(PipelinePlugin):
             message (Message): message triggering action
         """
         lang = message.data.get('lang', self.lang)
-        lang = lang.lower()
+        lang = standardize_lang_tag(lang)
         if lang in self.containers:
             self.registered_intents.append(message.data['name'])
             try:
@@ -218,7 +220,7 @@ class PadaciosoPipeline(PipelinePlugin):
             message (Message): message triggering action
         """
         lang = message.data.get('lang', self.lang)
-        lang = lang.lower()
+        lang = standardize_lang_tag(lang)
         if lang in self.containers:
             self.registered_entities.append(message.data)
             self._register_object(message, 'entity',
@@ -242,16 +244,32 @@ class PadaciosoPipeline(PipelinePlugin):
             return None
 
         lang = lang or self.lang
-        lang = lang.lower()
+
+        lang = self._get_closest_lang(lang)
+        if lang is None:  # no intents registered for this lang
+            return None
+
         sess = SessionManager.get(message)
-        if lang in self.containers:
-            intent_container = self.containers.get(lang)
-            intents = [_calc_padacioso_intent(utt, intent_container, sess)
-                       for utt in utterances]
-            intents = [i for i in intents if i is not None]
-            # select best
-            if intents:
-                return max(intents, key=lambda k: k.conf)
+
+        intent_container = self.containers.get(lang)
+        intents = [_calc_padacioso_intent(utt, intent_container, sess)
+                   for utt in utterances]
+        intents = [i for i in intents if i is not None]
+        # select best
+        if intents:
+            return max(intents, key=lambda k: k.conf)
+
+    def _get_closest_lang(self, lang: str) -> Optional[str]:
+        if self.containers:
+            lang = standardize_lang_tag(lang)
+            closest, score = closest_match(lang, list(self.containers.keys()))
+            # https://langcodes-hickford.readthedocs.io/en/sphinx/index.html#distance-values
+            # 0 -> These codes represent the same language, possibly after filling in values and normalizing.
+            # 1- 3 -> These codes indicate a minor regional difference.
+            # 4 - 10 -> These codes indicate a significant but unproblematic regional difference.
+            if score < 10:
+                return closest
+        return None
 
     def shutdown(self):
         self.bus.remove('padatious:register_intent', self.register_intent)
