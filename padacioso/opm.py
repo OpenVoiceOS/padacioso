@@ -85,6 +85,11 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         log_deprecation("self.padacioso_config is deprecated, access self.config directly instead", "1.0.0")
         return self.config
 
+    @padacioso_config.setter
+    def padacioso_config(self, val):
+        log_deprecation("self.padacioso_config is deprecated, access self.config directly instead", "1.0.0")
+        self.config = val
+
     def _match_level(self, utterances, limit, lang=None,
                      message: Optional[Message] = None) -> Optional[IntentHandlerMatch]:
         """Match intent and make sure a certain level of confidence is reached.
