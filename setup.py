@@ -60,6 +60,9 @@ setup(
     author='jarbasai',
     author_email='jarbasai@mailfence.com',
     install_requires=required("requirements.txt"),
+    extras_require={
+        'extras': required('extras.txt')
+    },
     entry_points={'opm.pipeline': PLUGIN_ENTRY_POINT},
     description='dead simple intent parser'
 )
