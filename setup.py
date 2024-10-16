@@ -47,7 +47,7 @@ def required(requirements_file):
                 if pkg.strip() and not pkg.startswith("#")]
 
 
-PLUGIN_ENTRY_POINT = 'ovos-padacioso-pipeline-plugin=ovos_padacioso.opm:PadaciosoPipeline'
+PLUGIN_ENTRY_POINT = 'ovos-padacioso-pipeline-plugin=padacioso.opm:PadaciosoPipeline'
 
 
 setup(
