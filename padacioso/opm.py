@@ -4,6 +4,7 @@ from functools import lru_cache
 from os.path import isfile
 from typing import List, Optional
 
+from langcodes import closest_match
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
@@ -243,18 +244,32 @@ class PadaciosoPipeline(PipelinePlugin):
             return None
 
         lang = lang or self.lang
-        lang = standardize_lang_tag(lang)
+
+        lang = self._get_closest_lang(lang)
+        if lang is None:  # no intents registered for this lang
+            return None
+
         sess = SessionManager.get(message)
 
-        # TODO - allow close langs, match dialects
-        if lang in self.containers:
-            intent_container = self.containers.get(lang)
-            intents = [_calc_padacioso_intent(utt, intent_container, sess)
-                       for utt in utterances]
-            intents = [i for i in intents if i is not None]
-            # select best
-            if intents:
-                return max(intents, key=lambda k: k.conf)
+        intent_container = self.containers.get(lang)
+        intents = [_calc_padacioso_intent(utt, intent_container, sess)
+                   for utt in utterances]
+        intents = [i for i in intents if i is not None]
+        # select best
+        if intents:
+            return max(intents, key=lambda k: k.conf)
+
+    def _get_closest_lang(self, lang: str) -> Optional[str]:
+        if self.containers:
+            lang = standardize_lang_tag(lang)
+            closest, score = closest_match(lang, list(self.containers.keys()))
+            # https://langcodes-hickford.readthedocs.io/en/sphinx/index.html#distance-values
+            # 0 -> These codes represent the same language, possibly after filling in values and normalizing.
+            # 1- 3 -> These codes indicate a minor regional difference.
+            # 4 - 10 -> These codes indicate a significant but unproblematic regional difference.
+            if score < 10:
+                return closest
+        return None
 
     def shutdown(self):
         self.bus.remove('padatious:register_intent', self.register_intent)
