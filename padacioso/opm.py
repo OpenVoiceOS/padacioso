@@ -2,16 +2,18 @@
 
 from functools import lru_cache
 from os.path import isfile
-from typing import List, Optional
+from typing import Optional, Dict, List, Union
 
 from langcodes import closest_match
+from ovos_bus_client.client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
-from ovos_plugin_manager.templates.pipeline import PipelinePlugin, IntentMatch
+from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
 from ovos_utils import flatten_list
+from ovos_utils.fakebus import FakeBus
 from ovos_utils.lang import standardize_lang_tag
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation
 
 from padacioso import IntentContainer as FallbackIntentContainer
 
@@ -46,13 +48,12 @@ class PadaciosoIntent:
         return repr(self.__dict__)
 
 
-class PadaciosoPipeline(PipelinePlugin):
+class PadaciosoPipeline(ConfidenceMatcherPipeline):
     """Service class for padacioso intent matching."""
 
-    def __init__(self, bus, config):
-        super().__init__(config)
-        self.padacioso_config = config
-        self.bus = bus
+    def __init__(self, bus: Optional[Union[MessageBusClient, FakeBus]] = None,
+                 config: Optional[Dict] = None):
+        super().__init__(config=config or {}, bus=bus)
 
         core_config = Configuration()
         self.lang = standardize_lang_tag(core_config.get("lang", "en-US"))
@@ -60,13 +61,13 @@ class PadaciosoPipeline(PipelinePlugin):
         if self.lang not in langs:
             langs.append(self.lang)
         langs = [standardize_lang_tag(l) for l in langs]
-        self.conf_high = self.padacioso_config.get("conf_high") or 0.95
-        self.conf_med = self.padacioso_config.get("conf_med") or 0.8
-        self.conf_low = self.padacioso_config.get("conf_low") or 0.5
-        self.workers = self.padacioso_config.get("workers") or 4
+        self.conf_high = self.config.get("conf_high") or 0.95
+        self.conf_med = self.config.get("conf_med") or 0.8
+        self.conf_low = self.config.get("conf_low") or 0.5
+        self.workers = self.config.get("workers") or 4
 
         self.containers = {lang: FallbackIntentContainer(
-            self.padacioso_config.get("fuzz"), n_workers=self.workers)
+            self.config.get("fuzz"), n_workers=self.workers)
             for lang in langs}
 
         self.bus.on('padatious:register_intent', self.register_intent)
@@ -79,8 +80,18 @@ class PadaciosoPipeline(PipelinePlugin):
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded Padacioso intent parser.')
 
+    @property
+    def padacioso_config(self) -> Dict:
+        log_deprecation("self.padacioso_config is deprecated, access self.config directly instead", "1.0.0")
+        return self.config
+
+    @padacioso_config.setter
+    def padacioso_config(self, val):
+        log_deprecation("self.padacioso_config is deprecated, access self.config directly instead", "1.0.0")
+        self.config = val
+
     def _match_level(self, utterances, limit, lang=None,
-                     message: Optional[Message] = None) -> Optional[IntentMatch]:
+                     message: Optional[Message] = None) -> Optional[IntentHandlerMatch]:
         """Match intent and make sure a certain level of confidence is reached.
 
         Args:
@@ -95,11 +106,12 @@ class PadaciosoPipeline(PipelinePlugin):
         padacioso_intent = self.calc_intent(utterances, lang, message)
         if padacioso_intent is not None and padacioso_intent.conf > limit:
             skill_id = padacioso_intent.name.split(':')[0]
-            return IntentMatch(
-                'Padacioso', padacioso_intent.name,
-                padacioso_intent.matches, skill_id, padacioso_intent.sent)
+            return IntentHandlerMatch(match_type=padacioso_intent.name,
+                               match_data=padacioso_intent.matches,
+                               skill_id=skill_id,
+                               utterance=padacioso_intent.sent)
 
-    def match_high(self, utterances, lang=None, message=None) -> Optional[IntentMatch]:
+    def match_high(self, utterances: List[str], lang: str, message: Message) -> Optional[IntentHandlerMatch]:
         """Intent matcher for high confidence.
 
         Args:
@@ -108,7 +120,7 @@ class PadaciosoPipeline(PipelinePlugin):
         """
         return self._match_level(utterances, self.conf_high, lang, message)
 
-    def match_medium(self, utterances, lang=None, message=None) -> Optional[IntentMatch]:
+    def match_medium(self, utterances: List[str], lang: str, message: Message) -> Optional[IntentHandlerMatch]:
         """Intent matcher for medium confidence.
 
         Args:
@@ -117,7 +129,7 @@ class PadaciosoPipeline(PipelinePlugin):
         """
         return self._match_level(utterances, self.conf_med, lang, message)
 
-    def match_low(self, utterances, lang=None, message=None) -> Optional[IntentMatch]:
+    def match_low(self, utterances: List[str], lang: str, message: Message) -> Optional[IntentHandlerMatch]:
         """Intent matcher for low confidence.
 
         Args:
