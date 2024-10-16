@@ -9,7 +9,7 @@ from ovos_bus_client.client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
-from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentMatch
+from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.lang import standardize_lang_tag
@@ -81,7 +81,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         LOG.debug('Loaded Padacioso intent parser.')
 
     def _match_level(self, utterances, limit, lang=None,
-                     message: Optional[Message] = None) -> Optional[IntentMatch]:
+                     message: Optional[Message] = None) -> Optional[IntentHandlerMatch]:
         """Match intent and make sure a certain level of confidence is reached.
 
         Args:
@@ -96,12 +96,12 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         padacioso_intent = self.calc_intent(utterances, lang, message)
         if padacioso_intent is not None and padacioso_intent.conf > limit:
             skill_id = padacioso_intent.name.split(':')[0]
-            return IntentMatch(match_type=padacioso_intent.name,
+            return IntentHandlerMatch(match_type=padacioso_intent.name,
                                match_data=padacioso_intent.matches,
                                skill_id=skill_id,
                                utterance=padacioso_intent.sent)
 
-    def match_high(self, utterances: List[str], lang: str, message: Message) -> Optional[IntentMatch]:
+    def match_high(self, utterances: List[str], lang: str, message: Message) -> Optional[IntentHandlerMatch]:
         """Intent matcher for high confidence.
 
         Args:
@@ -110,7 +110,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """
         return self._match_level(utterances, self.conf_high, lang, message)
 
-    def match_medium(self, utterances: List[str], lang: str, message: Message) -> Optional[IntentMatch]:
+    def match_medium(self, utterances: List[str], lang: str, message: Message) -> Optional[IntentHandlerMatch]:
         """Intent matcher for medium confidence.
 
         Args:
@@ -119,7 +119,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """
         return self._match_level(utterances, self.conf_med, lang, message)
 
-    def match_low(self, utterances: List[str], lang: str, message: Message) -> Optional[IntentMatch]:
+    def match_low(self, utterances: List[str], lang: str, message: Message) -> Optional[IntentHandlerMatch]:
         """Intent matcher for low confidence.
 
         Args:
