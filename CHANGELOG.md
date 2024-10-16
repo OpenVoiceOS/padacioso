@@ -1,20 +1,12 @@
 # Changelog
 
-## [0.2.4a1](https://github.com/OpenVoiceOS/padacioso/tree/0.2.4a1) (2024-10-16)
+## [1.0.0a1](https://github.com/OpenVoiceOS/padacioso/tree/1.0.0a1) (2024-10-16)
 
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.3a1...0.2.4a1)
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.4...1.0.0a1)
 
-**Merged pull requests:**
+**Breaking changes:**
 
-- fix:standardize\_lang [\#27](https://github.com/OpenVoiceOS/padacioso/pull/27) ([JarbasAl](https://github.com/JarbasAl))
-
-## [0.2.3a1](https://github.com/OpenVoiceOS/padacioso/tree/0.2.3a1) (2024-10-14)
-
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.2...0.2.3a1)
-
-**Merged pull requests:**
-
-- move unittests to padacioso repo [\#25](https://github.com/OpenVoiceOS/padacioso/pull/25) ([JarbasAl](https://github.com/JarbasAl))
+- feat!:pipeline factory [\#29](https://github.com/OpenVoiceOS/padacioso/pull/29) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
