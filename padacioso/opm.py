@@ -13,7 +13,7 @@ from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, In
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.lang import standardize_lang_tag
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation
 
 from padacioso import IntentContainer as FallbackIntentContainer
 
@@ -79,6 +79,11 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.registered_entities = []
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded Padacioso intent parser.')
+
+    @property
+    def padacioso_config(self) -> Dict:
+        log_deprecation("self.padacioso_config is deprecated, access self.config directly instead", "1.0.0")
+        return self.config
 
     def _match_level(self, utterances, limit, lang=None,
                      message: Optional[Message] = None) -> Optional[IntentHandlerMatch]:
