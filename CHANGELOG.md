@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.4a1](https://github.com/OpenVoiceOS/padacioso/tree/0.2.4a1) (2024-10-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.3a1...0.2.4a1)
+
+**Merged pull requests:**
+
+- fix:standardize\_lang [\#27](https://github.com/OpenVoiceOS/padacioso/pull/27) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.2.3a1](https://github.com/OpenVoiceOS/padacioso/tree/0.2.3a1) (2024-10-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.2...0.2.3a1)
