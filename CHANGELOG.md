@@ -1,12 +1,12 @@
 # Changelog
 
-## [1.0.0a1](https://github.com/OpenVoiceOS/padacioso/tree/1.0.0a1) (2024-10-16)
+## [1.0.1a1](https://github.com/OpenVoiceOS/padacioso/tree/1.0.1a1) (2025-06-16)
 
-[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.4...1.0.0a1)
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.0...1.0.1a1)
 
-**Breaking changes:**
+**Merged pull requests:**
 
-- feat!:pipeline factory [\#29](https://github.com/OpenVoiceOS/padacioso/pull/29) ([JarbasAl](https://github.com/JarbasAl))
+- Update ovos-plugin-manager requirement from \<1.0.0,\>=0.5.0 to \>=0.5.0,\<2.0.0 [\#31](https://github.com/OpenVoiceOS/padacioso/pull/31) ([dependabot[bot]](https://github.com/apps/dependabot))
 
 
 
