@@ -10,7 +10,7 @@ try:
 except ImportError:
     import logging
 
-    LOG = logging.getLogger('padacioso')
+    LOG = logging.getLogger("padacioso")
 
     from difflib import SequenceMatcher
 
@@ -69,8 +69,7 @@ class IntentContainer:
         @param lines: list of intent regexes
         """
         if name in self.intent_samples:
-            raise RuntimeError(f"Attempted to re-register existing intent: "
-                               f"{name}")
+            raise RuntimeError(f"Attempted to re-register existing intent: {name}")
         expanded = []
         for l in lines:
             expanded += expand_parentheses(normalize_example(l))
@@ -78,10 +77,9 @@ class IntentContainer:
         regexes.sort(key=len, reverse=True)
         self.intent_samples[name] = regexes
         for r in regexes:
-            self._cased_matchers[r] = \
-                simplematch.Matcher(r, case_sensitive=True)
-            self._uncased_matchers[r] = \
-                simplematch.Matcher(r, case_sensitive=False)
+            self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
+            self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
+        self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_intent(self, name: str):
         """
@@ -104,13 +102,13 @@ class IntentContainer:
         @param lines: list of entity examples
         """
         if name in self.entity_samples:
-            raise RuntimeError(f"Attempted to re-register existing entity: "
-                               f"{name}")
+            raise RuntimeError(f"Attempted to re-register existing entity: {name}")
         name = name.lower()
         expanded = []
         for l in lines:
             expanded += expand_parentheses(l)
         self.entity_samples[name] = expanded
+        self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_entity(self, name: str):
         """
@@ -139,14 +137,12 @@ class IntentContainer:
         for intent_name, contexts in self.required_contexts.items():
             if intent_name not in self.available_contexts:
                 excluded_intents.append(intent_name)
-            elif any(context not in self.available_contexts[intent_name]
-                     for context in contexts):
+            elif any(context not in self.available_contexts[intent_name] for context in contexts):
                 excluded_intents.append(intent_name)
         for intent_name, contexts in self.excluded_contexts.items():
             if intent_name not in self.available_contexts:
                 continue
-            if any(context in self.available_contexts[intent_name]
-                   for context in contexts):
+            if any(context in self.available_contexts[intent_name] for context in contexts):
                 excluded_intents.append(intent_name)
         return excluded_intents
 
@@ -158,8 +154,7 @@ class IntentContainer:
                 penalty = 0.15
             if r not in self._cased_matchers:
                 LOG.warning(f"{r} not initialized")
-                self._cased_matchers[r] = \
-                    simplematch.Matcher(r, case_sensitive=True)
+                self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
             entities = self._cased_matchers[r].match(query)
             if entities is not None:
                 for k, v in entities.items():
@@ -169,14 +164,11 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {},
-                        "conf": 1 - penalty,
-                        "name": intent_name}
+                return {"entities": entities or {}, "conf": 1 - penalty, "name": intent_name}
 
             if r not in self._uncased_matchers:
                 LOG.warning(f"{r} not initialized")
-                self._uncased_matchers[r] = \
-                    simplematch.Matcher(r, case_sensitive=False)
+                self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
             entities = self._uncased_matchers[r].match(query)
             if entities is not None:
                 # penalize case mismatch
@@ -188,9 +180,7 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {},
-                        "conf": 1 - penalty,
-                        "name": intent_name}
+                return {"entities": entities or {}, "conf": 1 - penalty, "name": intent_name}
 
         if self.fuzz:
             for r in regexes:
@@ -251,7 +241,7 @@ class IntentContainer:
         @param query: input to evaluate for an intent
         @return: dict matched intent (or None)
         """
-        match = {'name': None, 'entities': {}}
+        match = {"name": None, "entities": {}}
         intents = [i for i in self.calc_intents(query) if i is not None and i.get("name")]
         if len(intents) == 0:
             LOG.info("No match")
@@ -266,9 +256,9 @@ class IntentContainer:
 
         match = ties[0]
 
-        for entity in set(match['entities'].keys()):
-            entities = match['entities'].pop(entity)
-            match['entities'][entity.lower()] = entities
+        for entity in set(match["entities"].keys()):
+            entities = match["entities"].pop(entity)
+            match["entities"][entity.lower()] = entities
         LOG.debug(match)
         return match
 
