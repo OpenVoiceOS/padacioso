@@ -1,4 +1,3 @@
-import concurrent.futures
 from typing import List, Iterator, Optional
 
 import simplematch
@@ -11,10 +10,9 @@ try:
 except ImportError:
     import logging
 
-    LOG = logging.getLogger('padacioso')
+    LOG = logging.getLogger("padacioso")
 
     from difflib import SequenceMatcher
-
 
     def fuzzy_match(x, against):
         """Perform a 'fuzzy' comparison between two strings.
@@ -37,6 +35,10 @@ class IntentContainer:
         self.required_contexts = {}
         self.excluded_keywords = {}
         self.excluded_contexts = {}
+
+        # Cache for optimization - pre-built list for fast iteration
+        self._intent_list = []  # Pre-built list of (intent_name, regexes)
+        self._cache_dirty = True  # Flag to rebuild cache on next query
 
         if "word" not in simplematch.types:
             LOG.debug(f"Registering `word` type")
@@ -67,8 +69,7 @@ class IntentContainer:
         @param lines: list of intent regexes
         """
         if name in self.intent_samples:
-            raise RuntimeError(f"Attempted to re-register existing intent: "
-                               f"{name}")
+            raise RuntimeError(f"Attempted to re-register existing intent: {name}")
         expanded = []
         for l in lines:
             expanded += expand_parentheses(normalize_example(l))
@@ -76,10 +77,9 @@ class IntentContainer:
         regexes.sort(key=len, reverse=True)
         self.intent_samples[name] = regexes
         for r in regexes:
-            self._cased_matchers[r] = \
-                simplematch.Matcher(r, case_sensitive=True)
-            self._uncased_matchers[r] = \
-                simplematch.Matcher(r, case_sensitive=False)
+            self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
+            self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
+        self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_intent(self, name: str):
         """
@@ -93,6 +93,7 @@ class IntentContainer:
                     self._cased_matchers.pop(rx)
                 if rx in self._uncased_matchers:
                     self._uncased_matchers.pop(rx)
+            self._cache_dirty = True  # Mark cache as needing rebuild
 
     def add_entity(self, name: str, lines: List[str]):
         """
@@ -101,13 +102,13 @@ class IntentContainer:
         @param lines: list of entity examples
         """
         if name in self.entity_samples:
-            raise RuntimeError(f"Attempted to re-register existing entity: "
-                               f"{name}")
+            raise RuntimeError(f"Attempted to re-register existing entity: {name}")
         name = name.lower()
         expanded = []
         for l in lines:
             expanded += expand_parentheses(l)
         self.entity_samples[name] = expanded
+        self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_entity(self, name: str):
         """
@@ -118,6 +119,15 @@ class IntentContainer:
         if name in self.entity_samples:
             del self.entity_samples[name]
 
+    def _rebuild_cache(self):
+        """
+        Rebuild cached intent metadata for fast filtering.
+        Called lazily on first query after registration to avoid O(n²) during bulk registration.
+        """
+        # Pre-build the intent list to avoid reconstructing it every query
+        self._intent_list = list(self.intent_samples.items())
+        self._cache_dirty = False
+
     def _filter(self, query: str):
         # filter intents based on context/excluded keywords
         excluded_intents = []
@@ -127,14 +137,12 @@ class IntentContainer:
         for intent_name, contexts in self.required_contexts.items():
             if intent_name not in self.available_contexts:
                 excluded_intents.append(intent_name)
-            elif any(context not in self.available_contexts[intent_name]
-                     for context in contexts):
+            elif any(context not in self.available_contexts[intent_name] for context in contexts):
                 excluded_intents.append(intent_name)
         for intent_name, contexts in self.excluded_contexts.items():
             if intent_name not in self.available_contexts:
                 continue
-            if any(context in self.available_contexts[intent_name]
-                   for context in contexts):
+            if any(context in self.available_contexts[intent_name] for context in contexts):
                 excluded_intents.append(intent_name)
         return excluded_intents
 
@@ -146,8 +154,7 @@ class IntentContainer:
                 penalty = 0.15
             if r not in self._cased_matchers:
                 LOG.warning(f"{r} not initialized")
-                self._cased_matchers[r] = \
-                    simplematch.Matcher(r, case_sensitive=True)
+                self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
             entities = self._cased_matchers[r].match(query)
             if entities is not None:
                 for k, v in entities.items():
@@ -157,14 +164,11 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {},
-                        "conf": 1 - penalty,
-                        "name": intent_name}
+                return {"entities": entities or {}, "conf": 1 - penalty, "name": intent_name}
 
             if r not in self._uncased_matchers:
                 LOG.warning(f"{r} not initialized")
-                self._uncased_matchers[r] = \
-                    simplematch.Matcher(r, case_sensitive=False)
+                self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
             entities = self._uncased_matchers[r].match(query)
             if entities is not None:
                 # penalize case mismatch
@@ -176,9 +180,7 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {},
-                        "conf": 1 - penalty,
-                        "name": intent_name}
+                return {"entities": entities or {}, "conf": 1 - penalty, "name": intent_name}
 
         if self.fuzz:
             for r in regexes:
@@ -205,8 +207,7 @@ class IntentContainer:
         score = (fuzzy_score + base_score) / 2
 
         if entities is not None:
-            return {"entities": entities or {},
-                    "conf": (fuzzy_score + base_score) / 2}
+            return {"entities": entities or {}, "conf": score}
 
     def calc_intents(self, query: str) -> Iterator[dict]:
         """
@@ -214,19 +215,25 @@ class IntentContainer:
         @param query: input to evaluate for an intent match
         @return: yields dict intent matches
         """
-        # filter intents based on context/excluded keywords
+        # Lazy cache rebuild - only rebuild once after bulk registration
+        # This avoids O(n²) scaling during registration (rebuild on every add)
+        if self._cache_dirty:
+            self._rebuild_cache()
+
+        # Filter based on runtime context/keywords (query and session dependent)
         excluded_intents = self._filter(query)
 
-        # do the work in parallel instead of sequentially
-        with concurrent.futures.ProcessPoolExecutor(max_workers=self.workers) as executor:
-            future_to_source = {
-                executor.submit(self._match, query, intent_name, regexes): intent_name
-                for intent_name, regexes in self.intent_samples.items() if intent_name not in excluded_intents
-            }
-            for future in concurrent.futures.as_completed(future_to_source):
-                res = future.result()
-                if res is not None:
-                    yield res
+        # Sequential processing - threading overhead > actual work for regex matching
+        for intent_name, regexes in self._intent_list:
+            if intent_name in excluded_intents:
+                continue
+            res = self._match(query, intent_name, regexes)
+            if res is not None:
+                yield res
+                # Early exit optimization: perfect match found
+                # TODO: Some validation that we don't have duplicates, and warning if we do
+                if res.get("conf", 0) == 1.0:
+                    return
 
     def calc_intent(self, query: str) -> Optional[dict]:
         """
@@ -234,7 +241,7 @@ class IntentContainer:
         @param query: input to evaluate for an intent
         @return: dict matched intent (or None)
         """
-        match = {'name': None, 'entities': {}}
+        match = {"name": None, "entities": {}}
         intents = [i for i in self.calc_intents(query) if i is not None and i.get("name")]
         if len(intents) == 0:
             LOG.info("No match")
@@ -249,9 +256,9 @@ class IntentContainer:
 
         match = ties[0]
 
-        for entity in set(match['entities'].keys()):
-            entities = match['entities'].pop(entity)
-            match['entities'][entity.lower()] = entities
+        for entity in set(match["entities"].keys()):
+            entities = match["entities"].pop(entity)
+            match["entities"][entity.lower()] = entities
         LOG.debug(match)
         return match
 
@@ -260,6 +267,7 @@ class IntentContainer:
             self.excluded_keywords[intent_name] = samples
         else:
             self.excluded_keywords[intent_name] += samples
+        self._cache_dirty = True  # Mark cache as needing rebuild
 
     def set_context(self, intent_name, context_name, context_val=None):
         if intent_name not in self.available_contexts:
@@ -271,11 +279,12 @@ class IntentContainer:
             self.excluded_contexts[intent_name] = [context_name]
         else:
             self.excluded_contexts[intent_name].append(context_name)
+        self._cache_dirty = True  # Mark cache as needing rebuild
 
     def unexclude_context(self, intent_name, context_name):
         if intent_name in self.excluded_contexts:
-            self.excluded_contexts[intent_name] = [c for c in self.excluded_contexts[intent_name]
-                                                   if context_name != c]
+            self.excluded_contexts[intent_name] = [c for c in self.excluded_contexts[intent_name] if context_name != c]
+        self._cache_dirty = True  # Mark cache as needing rebuild
 
     def unset_context(self, intent_name, context_name):
         if intent_name in self.available_contexts:
@@ -287,11 +296,12 @@ class IntentContainer:
             self.required_contexts[intent_name] = [context_name]
         else:
             self.required_contexts[intent_name].append(context_name)
+        self._cache_dirty = True  # Mark cache as needing rebuild
 
     def unrequire_context(self, intent_name, context_name):
         if intent_name in self.required_contexts:
-            self.required_contexts[intent_name] = [c for c in self.required_contexts[intent_name]
-                                                   if context_name != c]
+            self.required_contexts[intent_name] = [c for c in self.required_contexts[intent_name] if context_name != c]
+            self._cache_dirty = True  # Mark cache as needing rebuild
 
 
 def _init_sm_word_type():
