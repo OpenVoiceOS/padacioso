@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.1a2](https://github.com/OpenVoiceOS/padacioso/tree/1.0.1a2) (2025-11-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.1a1...1.0.1a2)
+
+**Merged pull requests:**
+
+- Update ovos-plugin-manager requirement from \<2.0.0,\>=0.5.0 to \>=0.5.0,\<3.0.0 [\#34](https://github.com/OpenVoiceOS/padacioso/pull/34) ([dependabot[bot]](https://github.com/apps/dependabot))
+- fix: padacioso speed [\#33](https://github.com/OpenVoiceOS/padacioso/pull/33) ([mikejgray](https://github.com/mikejgray))
+
 ## [1.0.1a1](https://github.com/OpenVoiceOS/padacioso/tree/1.0.1a1) (2025-06-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.0...1.0.1a1)
