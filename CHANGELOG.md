@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1a3](https://github.com/OpenVoiceOS/padacioso/tree/1.0.1a3) (2025-12-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.1a2...1.0.1a3)
+
+**Merged pull requests:**
+
+- chore: Configure Renovate [\#36](https://github.com/OpenVoiceOS/padacioso/pull/36) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [1.0.1a2](https://github.com/OpenVoiceOS/padacioso/tree/1.0.1a2) (2025-11-10)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.1a1...1.0.1a2)
