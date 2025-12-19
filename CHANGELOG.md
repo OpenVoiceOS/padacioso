@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1a4](https://github.com/OpenVoiceOS/padacioso/tree/1.0.1a4) (2025-12-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.1a3...1.0.1a4)
+
+**Merged pull requests:**
+
+- chore\(deps\): update dependency python to 3.14 [\#37](https://github.com/OpenVoiceOS/padacioso/pull/37) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [1.0.1a3](https://github.com/OpenVoiceOS/padacioso/tree/1.0.1a3) (2025-12-18)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.1a2...1.0.1a3)
