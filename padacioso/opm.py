@@ -313,6 +313,7 @@ def _calc_padacioso_intent(utt: str,
             return None
         # TODO - how to disambiguate ?
         intent = ties[0]
+        intent.pop("_matched_regex", None)
         if "entities" in intent:
             intent["matches"] = intent.pop("entities")
         intent["sent"] = utt
