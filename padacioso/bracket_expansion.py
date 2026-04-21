@@ -225,26 +225,26 @@ def normalize_whitespace(text: str) -> str:
     return re.sub(r'\s+', ' ', text).strip()
 
 
-def normalize_apostrophes(text: str) -> str:
+def drop_apostrophes(text: str) -> str:
     """
-    Normalize various apostrophe/quote unicode variants to a plain ASCII apostrophe.
-    Handles curly apostrophes, typographic quotes, and similar characters that
-    look like apostrophes but are different code points.
+    Remove apostrophes and common apostrophe-like unicode variants from text.
+    Dropping rather than normalizing ensures "what's" and "whats" both match
+    regardless of which apostrophe character the STT engine emits.
     @param text: input text
-    @return: text with normalized apostrophes
+    @return: text with all apostrophe variants removed
     """
-    # Right single quotation mark, modifier letter apostrophe, heavy apostrophe, etc.
     apostrophe_variants = [
-        '’',  # RIGHT SINGLE QUOTATION MARK
-        '‘',  # LEFT SINGLE QUOTATION MARK
-        'ʼ',  # MODIFIER LETTER APOSTROPHE
-        'ʹ',  # MODIFIER LETTER PRIME
-        '`',  # GRAVE ACCENT (backtick)
-        '´',  # ACUTE ACCENT
-        '＇',  # FULLWIDTH APOSTROPHE
+        "'",        # ASCII apostrophe
+        "’",   # RIGHT SINGLE QUOTATION MARK
+        "‘",   # LEFT SINGLE QUOTATION MARK
+        "ʼ",   # MODIFIER LETTER APOSTROPHE
+        "ʹ",   # MODIFIER LETTER PRIME
+        "`",        # GRAVE ACCENT (backtick)
+        "´",   # ACUTE ACCENT
+        "＇",   # FULLWIDTH APOSTROPHE
     ]
     for variant in apostrophe_variants:
-        text = text.replace(variant, "'")
+        text = text.replace(variant, "")
     return text
 
 
@@ -255,13 +255,13 @@ def normalize_utterance(text: str) -> str:
     @param text: input utterance
     @return: normalized text
     """
-    text = normalize_apostrophes(text)
+    text = drop_apostrophes(text)
     text = normalize_whitespace(text)
     return text
 
 
 def normalize_example(example: str) -> str:
     text = clean_braces(translate_padatious(example))
-    text = normalize_apostrophes(text)
+    text = drop_apostrophes(text)
     text = normalize_whitespace(text)
     return text

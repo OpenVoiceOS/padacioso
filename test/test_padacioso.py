@@ -238,26 +238,29 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(normalize_whitespace("already fine"), "already fine")
         self.assertEqual(normalize_whitespace(""), "")
 
-    def test_normalize_apostrophes_util(self):
-        from padacioso.bracket_expansion import normalize_apostrophes
-        # curly right single quote
-        self.assertEqual(normalize_apostrophes("what’s up"), "what's up")
-        # curly left single quote
-        self.assertEqual(normalize_apostrophes("what‘s up"), "what's up")
-        # backtick
-        self.assertEqual(normalize_apostrophes("what`s up"), "what's up")
-        # modifier letter apostrophe
-        self.assertEqual(normalize_apostrophes("whatʼs up"), "what's up")
-        # already normal
-        self.assertEqual(normalize_apostrophes("what's up"), "what's up")
+    def test_drop_apostrophes_util(self):
+        from padacioso.bracket_expansion import drop_apostrophes
+        # plain ASCII apostrophe dropped
+        self.assertEqual(drop_apostrophes("what's up"), "whats up")
+        # U+2019 RIGHT SINGLE QUOTATION MARK dropped
+        self.assertEqual(drop_apostrophes("what’s up"), "whats up")
+        # U+2018 LEFT SINGLE QUOTATION MARK dropped
+        self.assertEqual(drop_apostrophes("what‘s up"), "whats up")
+        # backtick dropped
+        self.assertEqual(drop_apostrophes("what`s up"), "whats up")
+        # U+02BC MODIFIER LETTER APOSTROPHE dropped
+        self.assertEqual(drop_apostrophes("whatʼs up"), "whats up")
+        # no apostrophe — unchanged
+        self.assertEqual(drop_apostrophes("whats up"), "whats up")
 
     def test_normalize_example_util(self):
         from padacioso.bracket_expansion import normalize_example
         self.assertEqual(normalize_example("  hello   world  "), "hello world")
-        self.assertEqual(normalize_example("what’s up"), "what's up")
+        # apostrophe dropped
+        self.assertEqual(normalize_example("what's up"), "whats up")
         self.assertEqual(normalize_example("{{entity}}"), "{entity}")
-        # combined
-        self.assertEqual(normalize_example("  what’s  {{place}}  "), "what's {place}")
+        # combined: curly apostrophe dropped + whitespace collapsed + braces cleaned
+        self.assertEqual(normalize_example("  what's  {{place}}  "), "whats {place}")
 
     # normalization integration tests
     def test_double_whitespace_in_query(self):
@@ -279,26 +282,31 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(container.calc_intent('hello world')['name'], 'hello')
 
     def test_apostrophe_variants_in_query(self):
-        """Curly/fancy apostrophes in the query should match intents with straight apostrophes."""
+        """All apostrophe variants in a query should match after both sides drop apostrophes."""
         container = IntentContainer()
         container.add_intent('whats_up', ["what's up"])
-        # curly right single quotation mark (U+2019) — common from voice STT
-        self.assertEqual(container.calc_intent('what’s up')['name'], 'whats_up')
+        # stored as "whats up"; all query variants also drop to "whats up"
+        self.assertEqual(container.calc_intent("whats up")['name'], 'whats_up')
+        self.assertEqual(container.calc_intent("what's up")['name'], 'whats_up')
+        # U+2019 RIGHT SINGLE QUOTATION MARK — common from voice STT
+        self.assertEqual(container.calc_intent("what's up")['name'], 'whats_up')
         # backtick
         self.assertEqual(container.calc_intent('what`s up')['name'], 'whats_up')
-        # modifier letter apostrophe
-        self.assertEqual(container.calc_intent('whatʼs up')['name'], 'whats_up')
+        # U+02BC MODIFIER LETTER APOSTROPHE
+        self.assertEqual(container.calc_intent("whatʼs up")['name'], 'whats_up')
 
     def test_apostrophe_variants_in_training(self):
-        """Curly apostrophes in training examples should be stored as straight apostrophes."""
+        """Apostrophes in training examples should be dropped at registration time."""
         container = IntentContainer()
-        container.add_intent('whats_up', ["what’s up"])
-        self.assertIn("what's up", container.intent_samples['whats_up'])
-        self.assertNotIn("what’s up", container.intent_samples['whats_up'])
-        self.assertEqual(container.calc_intent("what's up")['name'], 'whats_up')
+        container.add_intent('whats_up', ["what's up"])
+        self.assertIn("whats up", container.intent_samples['whats_up'])
+        self.assertNotIn("what's up", container.intent_samples['whats_up'])
+        # curly apostrophe (U+2018) training example normalizes to same pattern as straight
+        container.add_intent('curly_test', ["what's new"])
+        self.assertIn("whats new", container.intent_samples['curly_test'])
 
     def test_apostrophe_with_entity(self):
-        """Apostrophe normalization should work alongside entity extraction."""
+        """Apostrophe dropping should work alongside entity extraction."""
         container = IntentContainer()
         container.add_intent('navigate', ["navigate to {place}"])
         match = container.calc_intent("navigate  to  the store")
@@ -323,6 +331,7 @@ class TestIntentContainer(unittest.TestCase):
         """Combined apostrophe and whitespace issues should both be handled."""
         container = IntentContainer()
         container.add_intent('whats_up', ["what's up"])
-        # curly apostrophe + double space
-        self.assertEqual(container.calc_intent('what’s  up')['name'], 'whats_up')
+        # U+2019 curly apostrophe + double space → "whats up" on both sides
+        self.assertEqual(container.calc_intent("what's  up")['name'], 'whats_up')
+        self.assertEqual(container.calc_intent("what's  up")['name'], 'whats_up')
 
