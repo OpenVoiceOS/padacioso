@@ -30,7 +30,9 @@ def expand_parentheses(sent: str) -> list:
             expanded = set()
             for text in result:
                 for combo in _expand_alternatives(text):
-                    expanded.add("".join(combo).strip())
+                    # collapse internal whitespace so the empty branch of
+                    # [optional] doesn't leave a double space
+                    expanded.add(re.sub(r' +', ' ', "".join(combo)).strip())
             if expanded == result:
                 break
             result = expanded

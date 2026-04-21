@@ -1,4 +1,5 @@
 from padacioso import IntentContainer
+from padacioso.bracket_expansion import expand_parentheses
 import unittest
 
 
@@ -349,4 +350,131 @@ class TestIntentContainer(unittest.TestCase):
         match = container.calc_intent('nork egin zuen doktoretza Curie rekin')
         self.assertEqual(match['name'], 'doktore')
         self.assertEqual(match['entities']['keyword'], 'Curie')
+
+
+class TestExpandParentheses(unittest.TestCase):
+
+    # --- no-op cases ---
+
+    def test_plain_string(self):
+        self.assertEqual(expand_parentheses("hello world"), ["hello world"])
+
+    def test_empty_string(self):
+        self.assertEqual(expand_parentheses(""), [""])
+
+    def test_entity_placeholder_untouched(self):
+        # {entity} must survive expansion unchanged
+        self.assertEqual(expand_parentheses("buy {item}"), ["buy {item}"])
+
+    def test_typed_entity_untouched(self):
+        self.assertEqual(expand_parentheses("set volume {level:int}"), ["set volume {level:int}"])
+
+    # --- (a|b) alternatives ---
+
+    def test_two_alternatives(self):
+        self.assertEqual(expand_parentheses("(hello|hi)"),
+                         sorted(["hello", "hi"]))
+
+    def test_three_alternatives(self):
+        self.assertEqual(expand_parentheses("(hello|hi|hey) world"),
+                         sorted(["hello world", "hey world", "hi world"]))
+
+    def test_alternatives_at_end(self):
+        self.assertEqual(expand_parentheses("turn (on|off)"),
+                         sorted(["turn off", "turn on"]))
+
+    def test_alternatives_in_middle(self):
+        self.assertEqual(expand_parentheses("I (want|need) coffee"),
+                         sorted(["I need coffee", "I want coffee"]))
+
+    def test_two_independent_groups(self):
+        self.assertEqual(
+            expand_parentheses("(a|b) (c|d)"),
+            sorted(["a c", "a d", "b c", "b d"])
+        )
+
+    def test_three_independent_groups(self):
+        self.assertEqual(
+            expand_parentheses("(a|b) (c|d) (e|f)"),
+            sorted(["a c e", "a c f", "a d e", "a d f",
+                    "b c e", "b c f", "b d e", "b d f"])
+        )
+
+    def test_empty_alternative_makes_optional(self):
+        # (word|) is the canonical optional form
+        self.assertEqual(expand_parentheses("hello (world|)"),
+                         sorted(["hello", "hello world"]))
+
+    def test_single_item_group(self):
+        # (word) with no pipe — parens stripped, single result
+        result = expand_parentheses("hello (world)")
+        self.assertEqual(result, ["hello world"])
+
+    # --- [optional] syntax ---
+
+    def test_optional_word(self):
+        self.assertEqual(expand_parentheses("hey [world]"),
+                         sorted(["hey", "hey world"]))
+
+    def test_optional_at_start(self):
+        self.assertEqual(expand_parentheses("[please] turn on"),
+                         sorted(["please turn on", "turn on"]))
+
+    def test_optional_at_end(self):
+        self.assertEqual(expand_parentheses("turn on [the light]"),
+                         sorted(["turn on", "turn on the light"]))
+
+    def test_two_optional_groups(self):
+        self.assertEqual(
+            expand_parentheses("[please] turn [on]"),
+            sorted(["please turn", "please turn on", "turn", "turn on"])
+        )
+
+    def test_optional_entity_placeholder(self):
+        self.assertEqual(expand_parentheses("hi [{person}|people]"),
+                         sorted(["hi", "hi {person}", "hi people"]))
+
+    # --- nested / combined ---
+
+    def test_alternatives_inside_optional(self):
+        self.assertEqual(
+            expand_parentheses("set [the] (light|fan)"),
+            sorted(["set light", "set fan", "set the light", "set the fan"])
+        )
+
+    def test_optional_and_alternatives_combined(self):
+        result = expand_parentheses("(turn|switch) [the] (light|fan) (on|off)")
+        self.assertEqual(len(result), 16)  # 2 * 2 * 2 * 2
+        self.assertIn("turn the light on", result)
+        self.assertIn("switch fan off", result)
+
+    def test_entity_with_alternatives(self):
+        self.assertEqual(
+            expand_parentheses("(buy|purchase) {item}"),
+            sorted(["buy {item}", "purchase {item}"])
+        )
+
+    def test_entity_with_optional(self):
+        self.assertEqual(
+            expand_parentheses("eat [some] {fruit}"),
+            sorted(["eat {fruit}", "eat some {fruit}"])
+        )
+
+    # --- whitespace handling ---
+
+    def test_leading_trailing_spaces_stripped(self):
+        for result in expand_parentheses("  hello  "):
+            self.assertEqual(result, result.strip())
+
+    def test_internal_spaces_preserved(self):
+        results = expand_parentheses("(good morning|hi) there")
+        self.assertIn("good morning there", results)
+        self.assertIn("hi there", results)
+
+    # --- deduplication ---
+
+    def test_duplicate_alternatives_deduplicated(self):
+        # (a|a) should produce one "a", not two
+        result = expand_parentheses("(hello|hello)")
+        self.assertEqual(result, ["hello"])
 
