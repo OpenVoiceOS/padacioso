@@ -214,5 +214,54 @@ def translate_padatious(example: str) -> str:
     return " ".join(tokens)
 
 
+def normalize_whitespace(text: str) -> str:
+    """
+    Collapse multiple consecutive whitespace characters into a single space
+    and strip leading/trailing whitespace.
+    @param text: input text
+    @return: whitespace-normalized text
+    """
+    import re
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def normalize_apostrophes(text: str) -> str:
+    """
+    Normalize various apostrophe/quote unicode variants to a plain ASCII apostrophe.
+    Handles curly apostrophes, typographic quotes, and similar characters that
+    look like apostrophes but are different code points.
+    @param text: input text
+    @return: text with normalized apostrophes
+    """
+    # Right single quotation mark, modifier letter apostrophe, heavy apostrophe, etc.
+    apostrophe_variants = [
+        '’',  # RIGHT SINGLE QUOTATION MARK
+        '‘',  # LEFT SINGLE QUOTATION MARK
+        'ʼ',  # MODIFIER LETTER APOSTROPHE
+        'ʹ',  # MODIFIER LETTER PRIME
+        '`',  # GRAVE ACCENT (backtick)
+        '´',  # ACUTE ACCENT
+        '＇',  # FULLWIDTH APOSTROPHE
+    ]
+    for variant in apostrophe_variants:
+        text = text.replace(variant, "'")
+    return text
+
+
+def normalize_utterance(text: str) -> str:
+    """
+    Normalize a plain utterance (training example or inference query) for consistent matching.
+    Does NOT touch entity placeholder syntax like {entity} or (a|b) expansions.
+    @param text: input utterance
+    @return: normalized text
+    """
+    text = normalize_apostrophes(text)
+    text = normalize_whitespace(text)
+    return text
+
+
 def normalize_example(example: str) -> str:
-    return clean_braces(translate_padatious(example))
+    text = clean_braces(translate_padatious(example))
+    text = normalize_apostrophes(text)
+    text = normalize_whitespace(text)
+    return text

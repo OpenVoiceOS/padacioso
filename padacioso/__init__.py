@@ -2,7 +2,7 @@ from typing import List, Iterator, Optional
 
 import simplematch
 
-from padacioso.bracket_expansion import expand_parentheses, normalize_example
+from padacioso.bracket_expansion import expand_parentheses, normalize_example, normalize_utterance
 
 try:
     from ovos_utils.log import LOG
@@ -215,6 +215,8 @@ class IntentContainer:
         @param query: input to evaluate for an intent match
         @return: yields dict intent matches
         """
+        query = normalize_utterance(query)
+
         # Lazy cache rebuild - only rebuild once after bulk registration
         # This avoids O(n²) scaling during registration (rebuild on every add)
         if self._cache_dirty:

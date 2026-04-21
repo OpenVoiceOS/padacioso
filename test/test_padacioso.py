@@ -229,3 +229,100 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(match['entities']['word0'], 'neon')
         self.assertEqual(match['entities']['word1'], 'neon')
 
+    # normalization unit tests
+    def test_normalize_whitespace_util(self):
+        from padacioso.bracket_expansion import normalize_whitespace
+        self.assertEqual(normalize_whitespace("hello  world"), "hello world")
+        self.assertEqual(normalize_whitespace("  hello   world  "), "hello world")
+        self.assertEqual(normalize_whitespace("one\ttwo\nthree"), "one two three")
+        self.assertEqual(normalize_whitespace("already fine"), "already fine")
+        self.assertEqual(normalize_whitespace(""), "")
+
+    def test_normalize_apostrophes_util(self):
+        from padacioso.bracket_expansion import normalize_apostrophes
+        # curly right single quote
+        self.assertEqual(normalize_apostrophes("what’s up"), "what's up")
+        # curly left single quote
+        self.assertEqual(normalize_apostrophes("what‘s up"), "what's up")
+        # backtick
+        self.assertEqual(normalize_apostrophes("what`s up"), "what's up")
+        # modifier letter apostrophe
+        self.assertEqual(normalize_apostrophes("whatʼs up"), "what's up")
+        # already normal
+        self.assertEqual(normalize_apostrophes("what's up"), "what's up")
+
+    def test_normalize_example_util(self):
+        from padacioso.bracket_expansion import normalize_example
+        self.assertEqual(normalize_example("  hello   world  "), "hello world")
+        self.assertEqual(normalize_example("what’s up"), "what's up")
+        self.assertEqual(normalize_example("{{entity}}"), "{entity}")
+        # combined
+        self.assertEqual(normalize_example("  what’s  {{place}}  "), "what's {place}")
+
+    # normalization integration tests
+    def test_double_whitespace_in_query(self):
+        """Extra whitespace in the spoken query should not prevent matching."""
+        container = IntentContainer()
+        container.add_intent('hello', ['hello world'])
+        # extra spaces in query
+        self.assertEqual(container.calc_intent('hello  world')['name'], 'hello')
+        self.assertEqual(container.calc_intent('  hello world  ')['name'], 'hello')
+        self.assertEqual(container.calc_intent('hello   world')['name'], 'hello')
+
+    def test_double_whitespace_in_training(self):
+        """Extra whitespace in training data should be collapsed at registration time."""
+        container = IntentContainer()
+        container.add_intent('hello', ['hello  world'])
+        # stored pattern should be normalized
+        self.assertIn('hello world', container.intent_samples['hello'])
+        self.assertNotIn('hello  world', container.intent_samples['hello'])
+        self.assertEqual(container.calc_intent('hello world')['name'], 'hello')
+
+    def test_apostrophe_variants_in_query(self):
+        """Curly/fancy apostrophes in the query should match intents with straight apostrophes."""
+        container = IntentContainer()
+        container.add_intent('whats_up', ["what's up"])
+        # curly right single quotation mark (U+2019) — common from voice STT
+        self.assertEqual(container.calc_intent('what’s up')['name'], 'whats_up')
+        # backtick
+        self.assertEqual(container.calc_intent('what`s up')['name'], 'whats_up')
+        # modifier letter apostrophe
+        self.assertEqual(container.calc_intent('whatʼs up')['name'], 'whats_up')
+
+    def test_apostrophe_variants_in_training(self):
+        """Curly apostrophes in training examples should be stored as straight apostrophes."""
+        container = IntentContainer()
+        container.add_intent('whats_up', ["what’s up"])
+        self.assertIn("what's up", container.intent_samples['whats_up'])
+        self.assertNotIn("what’s up", container.intent_samples['whats_up'])
+        self.assertEqual(container.calc_intent("what's up")['name'], 'whats_up')
+
+    def test_apostrophe_with_entity(self):
+        """Apostrophe normalization should work alongside entity extraction."""
+        container = IntentContainer()
+        container.add_intent('navigate', ["navigate to {place}"])
+        match = container.calc_intent("navigate  to  the store")
+        self.assertEqual(match['name'], 'navigate')
+        self.assertEqual(match['entities']['place'], 'the store')
+
+    def test_whitespace_with_entity(self):
+        """Whitespace normalization should not corrupt extracted entity values."""
+        container = IntentContainer()
+        container.add_intent('buy', ['buy {item}'])
+        match = container.calc_intent('buy   milk')
+        self.assertEqual(match['name'], 'buy')
+        self.assertEqual(match['entities']['item'], 'milk')
+
+    def test_leading_trailing_whitespace_query(self):
+        """Leading/trailing whitespace on the query should be stripped."""
+        container = IntentContainer()
+        container.add_intent('hello', ['hello'])
+        self.assertEqual(container.calc_intent('  hello  ')['name'], 'hello')
+
+    def test_mixed_normalization(self):
+        """Combined apostrophe and whitespace issues should both be handled."""
+        container = IntentContainer()
+        container.add_intent('whats_up', ["what's up"])
+        # curly apostrophe + double space
+        self.assertEqual(container.calc_intent('what’s  up')['name'], 'whats_up')
+
