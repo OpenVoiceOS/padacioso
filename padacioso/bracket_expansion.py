@@ -1,3 +1,6 @@
+import re
+
+
 class TreeFragment:
     """(Abstract) empty sentence fragment"""
 
@@ -221,37 +224,45 @@ def normalize_whitespace(text: str) -> str:
     @param text: input text
     @return: whitespace-normalized text
     """
-    import re
     return re.sub(r'\s+', ' ', text).strip()
 
 
 def drop_apostrophes(text: str) -> str:
     """
-    Remove apostrophes and common apostrophe-like unicode variants from text.
-    Dropping rather than normalizing ensures "what's" and "whats" both match
-    regardless of which apostrophe character the STT engine emits.
+    Replace apostrophes and common apostrophe-like unicode variants with a space.
+    Using a space rather than empty string preserves word boundaries so that
+    "it's" -> "it s" and both sides of a match reduce the same way.
     @param text: input text
-    @return: text with all apostrophe variants removed
+    @return: text with all apostrophe variants replaced by a space
     """
     apostrophe_variants = [
         "'",           # U+0027 ASCII apostrophe
-        "\u2019",      # U+2019 RIGHT SINGLE QUOTATION MARK
-        "\u2018",      # U+2018 LEFT SINGLE QUOTATION MARK
-        "\u02BC",      # U+02BC MODIFIER LETTER APOSTROPHE
-        "\u02B9",      # U+02B9 MODIFIER LETTER PRIME
+        "’",      # U+2019 RIGHT SINGLE QUOTATION MARK
+        "‘",      # U+2018 LEFT SINGLE QUOTATION MARK
+        "ʼ",      # U+02BC MODIFIER LETTER APOSTROPHE
+        "ʹ",      # U+02B9 MODIFIER LETTER PRIME
         "`",           # U+0060 GRAVE ACCENT (backtick)
-        "\u00B4",      # U+00B4 ACUTE ACCENT
-        "\uFF07",      # U+FF07 FULLWIDTH APOSTROPHE
+        "´",      # U+00B4 ACUTE ACCENT
+        "＇",      # U+FF07 FULLWIDTH APOSTROPHE
     ]
     for variant in apostrophe_variants:
-        text = text.replace(variant, "")
+        text = text.replace(variant, " ")
     return text
+
+
+def _space_entities(text: str) -> str:
+    """
+    Ensure a space exists on both sides of every {entity} placeholder.
+    Handles agglutinative suffixes like {keyword}ren so the suffix becomes
+    a separate token and the capture group is not contaminated.
+    """
+    return re.sub(r'(\{[^}]+\})', r' \1 ', text)
 
 
 def normalize_utterance(text: str) -> str:
     """
-    Normalize a plain utterance (training example or inference query) for consistent matching.
-    Does NOT touch entity placeholder syntax like {entity} or (a|b) expansions.
+    Normalize a plain utterance (inference query) for consistent matching.
+    Does NOT touch entity placeholder syntax.
     @param text: input utterance
     @return: normalized text
     """
