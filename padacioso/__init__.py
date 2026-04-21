@@ -165,7 +165,7 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {}, "conf": 1 - penalty, "name": intent_name}
+                return {"entities": entities or {}, "conf": max(0.0, 1.0 - penalty), "name": intent_name}
 
             if r not in self._uncased_matchers:
                 LOG.warning(f"{r} not initialized")
@@ -181,7 +181,7 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {}, "conf": 1 - penalty, "name": intent_name}
+                return {"entities": entities or {}, "conf": max(0.0, 1.0 - penalty), "name": intent_name}
 
         if self.fuzz:
             for r in regexes:
