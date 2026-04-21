@@ -22,6 +22,17 @@ def _wildcard_penalty(pattern: str) -> float:
     ratio = wildcard_tokens / len(tokens)
     return round(0.05 + 0.20 * ratio, 4)
 
+def _patch_nongreedy(matcher) -> None:
+    """Switch named capture groups to non-greedy for multi-entity patterns.
+
+    Prevents the first entity from consuming tokens that belong to later ones
+    when no literal separator exists between placeholders.
+    """
+    fixed = re.sub(r'\(\?P<(\w+)>\.\*\)', r'(?P<\1>.*?)', matcher.regex)
+    if fixed != matcher.regex:
+        matcher.regex = fixed
+
+
 try:
     from ovos_utils.log import LOG
     from ovos_utils.parse import fuzzy_match  # uses rapidfuzz for performance
@@ -97,8 +108,13 @@ class IntentContainer:
         regexes.sort(key=len, reverse=True)
         self.intent_samples[name] = regexes
         for r in regexes:
-            self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
-            self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
+            cm = simplematch.Matcher(r, case_sensitive=True)
+            um = simplematch.Matcher(r, case_sensitive=False)
+            if r.count("{") >= 2:
+                _patch_nongreedy(cm)
+                _patch_nongreedy(um)
+            self._cased_matchers[r] = cm
+            self._uncased_matchers[r] = um
             self._regex_penalty[r] = _wildcard_penalty(r)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
@@ -178,7 +194,10 @@ class IntentContainer:
             penalty = self._regex_penalty.get(r, 0.0)
             if r not in self._cased_matchers:
                 LOG.warning(f"{r} not initialized")
-                self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
+                cm = simplematch.Matcher(r, case_sensitive=True)
+                if r.count("{") >= 2:
+                    _patch_nongreedy(cm)
+                self._cased_matchers[r] = cm
                 self._regex_penalty.setdefault(r, _wildcard_penalty(r))
             entities = self._cased_matchers[r].match(query)
             if entities is not None:
@@ -193,7 +212,10 @@ class IntentContainer:
 
             if r not in self._uncased_matchers:
                 LOG.warning(f"{r} not initialized")
-                self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
+                um = simplematch.Matcher(r, case_sensitive=False)
+                if r.count("{") >= 2:
+                    _patch_nongreedy(um)
+                self._uncased_matchers[r] = um
                 self._regex_penalty.setdefault(r, _wildcard_penalty(r))
             entities = self._uncased_matchers[r].match(query)
             if entities is not None:
