@@ -234,14 +234,14 @@ def drop_apostrophes(text: str) -> str:
     @return: text with all apostrophe variants removed
     """
     apostrophe_variants = [
-        "'",        # ASCII apostrophe
-        "’",   # RIGHT SINGLE QUOTATION MARK
-        "‘",   # LEFT SINGLE QUOTATION MARK
-        "ʼ",   # MODIFIER LETTER APOSTROPHE
-        "ʹ",   # MODIFIER LETTER PRIME
-        "`",        # GRAVE ACCENT (backtick)
-        "´",   # ACUTE ACCENT
-        "＇",   # FULLWIDTH APOSTROPHE
+        "'",           # U+0027 ASCII apostrophe
+        "\u2019",      # U+2019 RIGHT SINGLE QUOTATION MARK
+        "\u2018",      # U+2018 LEFT SINGLE QUOTATION MARK
+        "\u02BC",      # U+02BC MODIFIER LETTER APOSTROPHE
+        "\u02B9",      # U+02B9 MODIFIER LETTER PRIME
+        "`",           # U+0060 GRAVE ACCENT (backtick)
+        "\u00B4",      # U+00B4 ACUTE ACCENT
+        "\uFF07",      # U+FF07 FULLWIDTH APOSTROPHE
     ]
     for variant in apostrophe_variants:
         text = text.replace(variant, "")
