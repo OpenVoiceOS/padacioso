@@ -8,7 +8,7 @@
 - [x] 4. Fix excluded-keywords substring bug (`_filter`)
 - [x] 5. Fix greedy entity capture for multi-entity patterns (`add_intent`, `_match`)
 - [x] 6. Skip cased pass for all-lowercase queries (`_match`)
-- [ ] 7. Early exit in `calc_intent` at high confidence
-- [ ] 8. Deterministic tie-breaking (`calc_intent`)
+- [x] 7. Early exit in `calc_intent` at high confidence
+- [x] 8. Deterministic tie-breaking (`calc_intent`)
 - [ ] 9. Increase LRU cache size in `opm.py`
 - [ ] 10. New tests (word-boundary exclusion, confidence clamp, tie-breaking, proportional penalty, multi-entity no-separator)
