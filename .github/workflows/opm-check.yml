@@ -10,6 +10,7 @@ jobs:
     uses: OpenVoiceOS/gh-automations/.github/workflows/opm-check.yml@dev
     with:
       python_version: '3.11'
+      install_extras: 'extras'
       plugin_type: 'auto'
       entry_point: '"ovos-padacioso-pipeline-plugin"'
       opm_require_found: true
