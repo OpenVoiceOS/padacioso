@@ -190,16 +190,21 @@ class IntentContainer:
         return excluded_intents
 
     def _match(self, query, intent_name, regexes):
+        query_has_upper = query != query.lower()
         for r in regexes:
             penalty = self._regex_penalty.get(r, 0.0)
-            if r not in self._cased_matchers:
-                LOG.warning(f"{r} not initialized")
-                cm = simplematch.Matcher(r, case_sensitive=True)
-                if r.count("{") >= 2:
-                    _patch_nongreedy(cm)
-                self._cased_matchers[r] = cm
-                self._regex_penalty.setdefault(r, _wildcard_penalty(r))
-            entities = self._cased_matchers[r].match(query)
+            entities = None
+
+            if query_has_upper:
+                if r not in self._cased_matchers:
+                    LOG.warning(f"{r} not initialized")
+                    cm = simplematch.Matcher(r, case_sensitive=True)
+                    if r.count("{") >= 2:
+                        _patch_nongreedy(cm)
+                    self._cased_matchers[r] = cm
+                    self._regex_penalty.setdefault(r, _wildcard_penalty(r))
+                entities = self._cased_matchers[r].match(query)
+
             if entities is not None:
                 for k, v in entities.items():
                     if k not in self.entity_samples:
@@ -219,12 +224,14 @@ class IntentContainer:
                 self._regex_penalty.setdefault(r, _wildcard_penalty(r))
             entities = self._uncased_matchers[r].match(query)
             if entities is not None:
-                # penalize case mismatch
-                penalty += 0.05
+                # query_has_upper + uncased match = genuine case mismatch
+                entity_penalty = 0.04 if not query_has_upper else 0.05
+                if query_has_upper:
+                    penalty += 0.05
                 for k, v in entities.items():
                     if k not in self.entity_samples:
                         # penalize unregistered entities
-                        penalty += 0.05
+                        penalty += entity_penalty
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
