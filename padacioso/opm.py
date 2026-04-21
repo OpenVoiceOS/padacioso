@@ -290,7 +290,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.bus.remove('detach_skill', self.handle_detach_skill)
 
 
-@lru_cache(maxsize=3)  # repeat calls under different conf levels wont re-run code
+@lru_cache(maxsize=128)  # covers burst of multiple ASR hypotheses without thrashing
 def _calc_padacioso_intent(utt: str,
                            intent_container: FallbackIntentContainer,
                            sess: Session) -> \

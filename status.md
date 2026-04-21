@@ -10,5 +10,5 @@
 - [x] 6. Skip cased pass for all-lowercase queries (`_match`)
 - [x] 7. Early exit in `calc_intent` at high confidence
 - [x] 8. Deterministic tie-breaking (`calc_intent`)
-- [ ] 9. Increase LRU cache size in `opm.py`
+- [x] 9. Increase LRU cache size in `opm.py`
 - [ ] 10. New tests (word-boundary exclusion, confidence clamp, tie-breaking, proportional penalty, multi-entity no-separator)
