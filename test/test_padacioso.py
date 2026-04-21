@@ -478,3 +478,62 @@ class TestExpandParentheses(unittest.TestCase):
         result = expand_parentheses("(hello|hello)")
         self.assertEqual(result, ["hello"])
 
+
+class TestAccuracyImprovements(unittest.TestCase):
+    """Tests for accuracy and speed improvements."""
+
+    def test_keyword_exclusion_word_boundary(self):
+        # "play" keyword must not fire when query contains "display" or "replay"
+        container = IntentContainer()
+        container.add_intent("music", ["play some music"])
+        container.add_intent("display", ["show me the display"])
+        container.exclude_keywords("music", ["play"])
+        # "display" contains "play" as substring — must NOT exclude music via substring
+        result = container.calc_intent("show me the display")
+        self.assertEqual(result["name"], "display")
+        # actual "play" word should still trigger exclusion
+        container2 = IntentContainer()
+        container2.add_intent("music", ["play some music"])
+        container2.add_intent("other", ["do something else"])
+        container2.exclude_keywords("music", ["play"])
+        result2 = container2.calc_intent("play some music")
+        self.assertIsNone(result2["name"])
+
+    def test_confidence_clamped_non_negative(self):
+        # many stacked penalties must never push confidence below 0
+        container = IntentContainer()
+        container.add_intent("test", ["* * * {a} {b} {c}"])
+        result = container.calc_intent("x y z p q r")
+        self.assertGreaterEqual(result.get("conf", 0), 0.0)
+
+    def test_wildcard_penalty_proportional(self):
+        from padacioso import _wildcard_penalty
+        # fully literal — no penalty
+        self.assertEqual(_wildcard_penalty("say hello"), 0.0)
+        # single wildcard out of 2 tokens: ratio=0.5
+        self.assertAlmostEqual(_wildcard_penalty("say *"), 0.15, places=4)
+        # single wildcard out of 3 tokens: ratio=1/3
+        self.assertAlmostEqual(_wildcard_penalty("say * please"), round(0.05 + 0.20 / 3, 4), places=4)
+        # all wildcards: ratio=1.0
+        self.assertAlmostEqual(_wildcard_penalty("* *"), 0.25, places=4)
+        # entity placeholders alone do NOT count as wildcards
+        self.assertEqual(_wildcard_penalty("{item} now"), 0.0)
+
+    def test_multi_entity_no_separator(self):
+        # two adjacent entity slots — non-greedy patch must split correctly
+        container = IntentContainer()
+        container.add_intent("test", ["{first} {last}"])
+        result = container.calc_intent("john doe")
+        self.assertEqual(result["name"], "test")
+        self.assertEqual(result["entities"].get("first"), "john")
+        self.assertEqual(result["entities"].get("last"), "doe")
+
+    def test_tie_breaking_deterministic(self):
+        # two intents with equal confidence must always return the same one
+        container = IntentContainer()
+        container.add_intent("alpha", ["hello world"])
+        container.add_intent("beta", ["hello world"])
+        first = container.calc_intent("hello world")
+        second = container.calc_intent("hello world")
+        self.assertEqual(first["name"], second["name"])
+

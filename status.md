@@ -11,4 +11,4 @@
 - [x] 7. Early exit in `calc_intent` at high confidence
 - [x] 8. Deterministic tie-breaking (`calc_intent`)
 - [x] 9. Increase LRU cache size in `opm.py`
-- [ ] 10. New tests (word-boundary exclusion, confidence clamp, tie-breaking, proportional penalty, multi-entity no-separator)
+- [x] 10. New tests (word-boundary exclusion, confidence clamp, tie-breaking, proportional penalty, multi-entity no-separator)
