@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2a2](https://github.com/OpenVoiceOS/padacioso/tree/1.0.2a2) (2026-04-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.2a1...1.0.2a2)
+
+**Merged pull requests:**
+
+- Update dependency ovos-bus-client to v1 [\#45](https://github.com/OpenVoiceOS/padacioso/pull/45) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [1.0.2a1](https://github.com/OpenVoiceOS/padacioso/tree/1.0.2a1) (2026-04-21)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.1a4...1.0.2a1)
