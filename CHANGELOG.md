@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2a1](https://github.com/OpenVoiceOS/padacioso/tree/1.0.2a1) (2026-04-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.1a4...1.0.2a1)
+
+**Merged pull requests:**
+
+- fix: normalize whitespace and apostrophes for training data and inference queries [\#44](https://github.com/OpenVoiceOS/padacioso/pull/44) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.0.1a4](https://github.com/OpenVoiceOS/padacioso/tree/1.0.1a4) (2025-12-19)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.1a3...1.0.1a4)
