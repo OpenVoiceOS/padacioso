@@ -68,8 +68,11 @@ Benchmarks on a mid-range laptop (single thread, Python 3.11, 500 iterations):
 | Query — no match (20 intents) | 0.48 ms | 0.73 ms |
 | Query — exact match (100 intents) | 0.61 ms | 0.84 ms |
 | Query — exact match (500 intents) | 1.05 ms | 1.39 ms |
+| Query — exact match (10 000 intents) | 13.8 ms | 16.2 ms |
+| Query — no match (10 000 intents) | 31.0 ms | 33.4 ms |
 
-Queries short-circuit at 0.95 confidence, so real-world latency for a matched intent is typically at the lower end of the range.
+Matched queries short-circuit at 0.95 confidence, so they scan only a fraction of the intent list.
+No-match queries must exhaust every intent; above ~1 000 intents a pre-filter (BM25 or token-set) would help.
 
 ## OVOS plugin
 
