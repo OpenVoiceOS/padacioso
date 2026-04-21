@@ -108,7 +108,7 @@ class IntentContainer:
         expanded = []
         for l in lines:
             expanded += expand_parentheses(l)
-        self.entity_samples[name] = expanded
+        self.entity_samples[name] = set(expanded)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_entity(self, name: str):
