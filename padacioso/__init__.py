@@ -213,7 +213,7 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name}
+                return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name, "_matched_regex": r}
 
             if r not in self._uncased_matchers:
                 LOG.warning(f"{r} not initialized")
@@ -235,7 +235,7 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name}
+                return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name, "_matched_regex": r}
 
         if self.fuzz:
             for r in regexes:
@@ -298,20 +298,35 @@ class IntentContainer:
         @param query: input to evaluate for an intent
         @return: dict matched intent (or None)
         """
+        _GOOD_ENOUGH = 0.95
         match = {"name": None, "entities": {}}
-        intents = [i for i in self.calc_intents(query) if i is not None and i.get("name")]
-        if len(intents) == 0:
+        best_conf = 0.0
+        intents = []
+        for res in self.calc_intents(query):
+            if res is None or not res.get("name"):
+                continue
+            intents.append(res)
+            if res.get("conf", 0) > best_conf:
+                best_conf = res["conf"]
+            if best_conf >= _GOOD_ENOUGH:
+                break
+
+        if not intents:
             LOG.info("No match")
             return match
 
-        best_conf = max(x.get("conf", 0) for x in intents if x.get("name"))
+        best_conf = max(x.get("conf", 0) for x in intents)
         ties = [i for i in intents if i.get("conf", 0) == best_conf]
 
         if len(ties) > 1:
-            # TODO - how to untie?
-            LOG.info(f"tied intents: {ties}")
+            LOG.info(f"tied intents: {[t['name'] for t in ties]}")
+            ties.sort(key=lambda t: (
+                self._regex_penalty.get(t.get("_matched_regex", ""), 1.0),
+                t["name"]
+            ))
 
-        match = ties[0]
+        match = dict(ties[0])
+        match.pop("_matched_regex", None)
 
         for entity in set(match["entities"].keys()):
             entities = match["entities"].pop(entity)
