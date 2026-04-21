@@ -1,8 +1,26 @@
+import re
 from typing import List, Iterator, Optional
 
 import simplematch
 
 from padacioso.bracket_expansion import expand_parentheses, normalize_example, normalize_utterance, _space_entities
+
+
+def _wildcard_penalty(pattern: str) -> float:
+    """Compute a wildcard penalty proportional to how much of the pattern is wildcards.
+
+    Only `*` tokens are counted; entity placeholders have their own penalty path.
+    Fully literal (or entity-only) patterns return 0.
+    Range: [0.05, 0.25] when any `*` token exists, 0 otherwise.
+    """
+    tokens = pattern.split()
+    if not tokens:
+        return 0.0
+    wildcard_tokens = sum(1 for t in tokens if "*" in t)
+    if wildcard_tokens == 0:
+        return 0.0
+    ratio = wildcard_tokens / len(tokens)
+    return round(0.05 + 0.20 * ratio, 4)
 
 try:
     from ovos_utils.log import LOG
@@ -39,6 +57,7 @@ class IntentContainer:
         # Cache for optimization - pre-built list for fast iteration
         self._intent_list = []  # Pre-built list of (intent_name, regexes)
         self._cache_dirty = True  # Flag to rebuild cache on next query
+        self._regex_penalty = {}  # Per-regex wildcard penalty
 
         if "word" not in simplematch.types:
             LOG.debug(f"Registering `word` type")
@@ -80,6 +99,7 @@ class IntentContainer:
         for r in regexes:
             self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
             self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
+            self._regex_penalty[r] = _wildcard_penalty(r)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_intent(self, name: str):
@@ -94,6 +114,7 @@ class IntentContainer:
                     self._cased_matchers.pop(rx)
                 if rx in self._uncased_matchers:
                     self._uncased_matchers.pop(rx)
+                self._regex_penalty.pop(rx, None)
             self._cache_dirty = True  # Mark cache as needing rebuild
 
     def add_entity(self, name: str, lines: List[str]):
@@ -149,13 +170,11 @@ class IntentContainer:
 
     def _match(self, query, intent_name, regexes):
         for r in regexes:
-            penalty = 0
-            if "*" in r:
-                # penalize wildcards
-                penalty = 0.15
+            penalty = self._regex_penalty.get(r, 0.0)
             if r not in self._cased_matchers:
                 LOG.warning(f"{r} not initialized")
                 self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
+                self._regex_penalty.setdefault(r, _wildcard_penalty(r))
             entities = self._cased_matchers[r].match(query)
             if entities is not None:
                 for k, v in entities.items():
@@ -165,11 +184,12 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {}, "conf": max(0.0, 1.0 - penalty), "name": intent_name}
+                return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name}
 
             if r not in self._uncased_matchers:
                 LOG.warning(f"{r} not initialized")
                 self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
+                self._regex_penalty.setdefault(r, _wildcard_penalty(r))
             entities = self._uncased_matchers[r].match(query)
             if entities is not None:
                 # penalize case mismatch
@@ -181,7 +201,7 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {}, "conf": max(0.0, 1.0 - penalty), "name": intent_name}
+                return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name}
 
         if self.fuzz:
             for r in regexes:
