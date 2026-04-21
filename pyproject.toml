@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "padacioso"
+dynamic = ["version"]
+description = "dead simple intent parser"
+readme = "readme.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "jarbasai", email = "jarbasai@mailfence.com" }]
+requires-python = ">=3.8"
+dependencies = [
+    "simplematch",
+]
+
+[project.optional-dependencies]
+extras = [
+    "ovos-plugin-manager>=0.5.0,<3.0.0",
+    "ovos-utils>=0.3.5,<1.0.0",
+    "langcodes",
+]
+test = [
+    "ovos-plugin-manager>=0.5.0,<3.0.0",
+    "ovos-utils>=0.3.5,<1.0.0",
+    "ovos-bus-client>=0.0.8,<1.0.0",
+    "langcodes",
+]
+
+[project.urls]
+Homepage = "https://github.com/OpenVoiceOS/padacioso"
+
+[project.entry-points."opm.pipeline"]
+"ovos-padacioso-pipeline-plugin" = "padacioso.opm:PadaciosoPipeline"
+
+[tool.setuptools.dynamic]
+version = { attr = "padacioso.version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["padacioso*"]

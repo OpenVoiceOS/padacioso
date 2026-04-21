@@ -1,4 +1,5 @@
 from padacioso import IntentContainer
+from padacioso.bracket_expansion import expand_parentheses
 import unittest
 
 
@@ -228,4 +229,252 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(match['name'], 'test_double_wildcard')
         self.assertEqual(match['entities']['word0'], 'neon')
         self.assertEqual(match['entities']['word1'], 'neon')
+
+    # normalization unit tests
+    def test_normalize_whitespace_util(self):
+        from padacioso.bracket_expansion import normalize_whitespace
+        self.assertEqual(normalize_whitespace("hello  world"), "hello world")
+        self.assertEqual(normalize_whitespace("  hello   world  "), "hello world")
+        self.assertEqual(normalize_whitespace("one\ttwo\nthree"), "one two three")
+        self.assertEqual(normalize_whitespace("already fine"), "already fine")
+        self.assertEqual(normalize_whitespace(""), "")
+
+    def test_drop_apostrophes_util(self):
+        from padacioso.bracket_expansion import drop_apostrophes
+        # apostrophes replaced with space to preserve word boundaries
+        self.assertEqual(drop_apostrophes("what's up"), "what s up")
+        # U+2019 RIGHT SINGLE QUOTATION MARK
+        self.assertEqual(drop_apostrophes("what's up"), "what s up")
+        # U+2018 LEFT SINGLE QUOTATION MARK
+        self.assertEqual(drop_apostrophes("what's up"), "what s up")
+        # backtick
+        self.assertEqual(drop_apostrophes("what`s up"), "what s up")
+        # U+02BC MODIFIER LETTER APOSTROPHE
+        self.assertEqual(drop_apostrophes("whatʼs up"), "what s up")
+        # no apostrophe — unchanged
+        self.assertEqual(drop_apostrophes("what s up"), "what s up")
+
+    def test_normalize_example_util(self):
+        from padacioso.bracket_expansion import normalize_example
+        self.assertEqual(normalize_example("  hello   world  "), "hello world")
+        # apostrophe replaced with space, then whitespace collapsed
+        self.assertEqual(normalize_example("what's up"), "what s up")
+        self.assertEqual(normalize_example("{{entity}}"), "{entity}")
+        # combined: curly apostrophe + whitespace + braces cleaned
+        self.assertEqual(normalize_example("  what's  {{place}}  "), "what s {place}")
+
+    # normalization integration tests
+    def test_double_whitespace_in_query(self):
+        """Extra whitespace in the spoken query should not prevent matching."""
+        container = IntentContainer()
+        container.add_intent('hello', ['hello world'])
+        self.assertEqual(container.calc_intent('hello  world')['name'], 'hello')
+        self.assertEqual(container.calc_intent('  hello world  ')['name'], 'hello')
+        self.assertEqual(container.calc_intent('hello   world')['name'], 'hello')
+
+    def test_double_whitespace_in_training(self):
+        """Extra whitespace in training data should be collapsed at registration time."""
+        container = IntentContainer()
+        container.add_intent('hello', ['hello  world'])
+        self.assertIn('hello world', container.intent_samples['hello'])
+        self.assertNotIn('hello  world', container.intent_samples['hello'])
+        self.assertEqual(container.calc_intent('hello world')['name'], 'hello')
+
+    def test_apostrophe_variants_in_query(self):
+        """All apostrophe variants in a query should match — both sides normalize the same way."""
+        container = IntentContainer()
+        container.add_intent('whats_up', ["what's up"])
+        # stored as "what s up"; query variants also reduce to "what s up"
+        self.assertEqual(container.calc_intent("what s up")['name'], 'whats_up')
+        self.assertEqual(container.calc_intent("what's up")['name'], 'whats_up')
+        # U+2019 RIGHT SINGLE QUOTATION MARK — common from voice STT
+        self.assertEqual(container.calc_intent("what's up")['name'], 'whats_up')
+        # backtick
+        self.assertEqual(container.calc_intent('what`s up')['name'], 'whats_up')
+        # U+02BC MODIFIER LETTER APOSTROPHE
+        self.assertEqual(container.calc_intent("whatʼs up")['name'], 'whats_up')
+
+    def test_apostrophe_variants_in_training(self):
+        """Apostrophes in training examples should be replaced with spaces at registration time."""
+        container = IntentContainer()
+        container.add_intent('whats_up', ["what's up"])
+        self.assertIn("what s up", container.intent_samples['whats_up'])
+        self.assertNotIn("what's up", container.intent_samples['whats_up'])
+        # curly apostrophe (U+2018) normalizes the same way
+        container.add_intent('curly_test', ["what's new"])
+        self.assertIn("what s new", container.intent_samples['curly_test'])
+
+    def test_apostrophe_with_entity(self):
+        """Apostrophe normalization should work alongside entity extraction."""
+        container = IntentContainer()
+        container.add_intent('navigate', ["navigate to {place}"])
+        match = container.calc_intent("navigate  to  the store")
+        self.assertEqual(match['name'], 'navigate')
+        self.assertEqual(match['entities']['place'], 'the store')
+
+    def test_whitespace_with_entity(self):
+        """Whitespace normalization should not corrupt extracted entity values."""
+        container = IntentContainer()
+        container.add_intent('buy', ['buy {item}'])
+        match = container.calc_intent('buy   milk')
+        self.assertEqual(match['name'], 'buy')
+        self.assertEqual(match['entities']['item'], 'milk')
+
+    def test_leading_trailing_whitespace_query(self):
+        """Leading/trailing whitespace on the query should be stripped."""
+        container = IntentContainer()
+        container.add_intent('hello', ['hello'])
+        self.assertEqual(container.calc_intent('  hello  ')['name'], 'hello')
+
+    def test_mixed_normalization(self):
+        """Combined apostrophe and whitespace issues should both be handled."""
+        container = IntentContainer()
+        container.add_intent('whats_up', ["what's up"])
+        # curly apostrophe + double space → "what s up" on both sides
+        self.assertEqual(container.calc_intent("what's  up")['name'], 'whats_up')
+        self.assertEqual(container.calc_intent("what's  up")['name'], 'whats_up')
+
+    def test_entity_suffix_spacing(self):
+        """Agglutinative suffixes attached to {entity} placeholders should still match."""
+        container = IntentContainer()
+        # Basque-style patterns where suffix is glued to the placeholder
+        container.add_intent('doktore', [
+            'zeintzuk ziren {keyword}ren doktore-ikasleak',
+            'nork egin zuen doktoretza {keyword}rekin',
+        ])
+        # the suffix is separated at training time so the entity captures just the keyword
+        match = container.calc_intent('zeintzuk ziren Einstein ren doktore-ikasleak')
+        self.assertEqual(match['name'], 'doktore')
+        self.assertEqual(match['entities']['keyword'], 'Einstein')
+
+        match = container.calc_intent('nork egin zuen doktoretza Curie rekin')
+        self.assertEqual(match['name'], 'doktore')
+        self.assertEqual(match['entities']['keyword'], 'Curie')
+
+
+class TestExpandParentheses(unittest.TestCase):
+
+    # --- no-op cases ---
+
+    def test_plain_string(self):
+        self.assertEqual(expand_parentheses("hello world"), ["hello world"])
+
+    def test_empty_string(self):
+        self.assertEqual(expand_parentheses(""), [""])
+
+    def test_entity_placeholder_untouched(self):
+        # {entity} must survive expansion unchanged
+        self.assertEqual(expand_parentheses("buy {item}"), ["buy {item}"])
+
+    def test_typed_entity_untouched(self):
+        self.assertEqual(expand_parentheses("set volume {level:int}"), ["set volume {level:int}"])
+
+    # --- (a|b) alternatives ---
+
+    def test_two_alternatives(self):
+        self.assertEqual(expand_parentheses("(hello|hi)"),
+                         sorted(["hello", "hi"]))
+
+    def test_three_alternatives(self):
+        self.assertEqual(expand_parentheses("(hello|hi|hey) world"),
+                         sorted(["hello world", "hey world", "hi world"]))
+
+    def test_alternatives_at_end(self):
+        self.assertEqual(expand_parentheses("turn (on|off)"),
+                         sorted(["turn off", "turn on"]))
+
+    def test_alternatives_in_middle(self):
+        self.assertEqual(expand_parentheses("I (want|need) coffee"),
+                         sorted(["I need coffee", "I want coffee"]))
+
+    def test_two_independent_groups(self):
+        self.assertEqual(
+            expand_parentheses("(a|b) (c|d)"),
+            sorted(["a c", "a d", "b c", "b d"])
+        )
+
+    def test_three_independent_groups(self):
+        self.assertEqual(
+            expand_parentheses("(a|b) (c|d) (e|f)"),
+            sorted(["a c e", "a c f", "a d e", "a d f",
+                    "b c e", "b c f", "b d e", "b d f"])
+        )
+
+    def test_empty_alternative_makes_optional(self):
+        # (word|) is the canonical optional form
+        self.assertEqual(expand_parentheses("hello (world|)"),
+                         sorted(["hello", "hello world"]))
+
+    def test_single_item_group(self):
+        # (word) with no pipe — parens stripped, single result
+        result = expand_parentheses("hello (world)")
+        self.assertEqual(result, ["hello world"])
+
+    # --- [optional] syntax ---
+
+    def test_optional_word(self):
+        self.assertEqual(expand_parentheses("hey [world]"),
+                         sorted(["hey", "hey world"]))
+
+    def test_optional_at_start(self):
+        self.assertEqual(expand_parentheses("[please] turn on"),
+                         sorted(["please turn on", "turn on"]))
+
+    def test_optional_at_end(self):
+        self.assertEqual(expand_parentheses("turn on [the light]"),
+                         sorted(["turn on", "turn on the light"]))
+
+    def test_two_optional_groups(self):
+        self.assertEqual(
+            expand_parentheses("[please] turn [on]"),
+            sorted(["please turn", "please turn on", "turn", "turn on"])
+        )
+
+    def test_optional_entity_placeholder(self):
+        self.assertEqual(expand_parentheses("hi [{person}|people]"),
+                         sorted(["hi", "hi {person}", "hi people"]))
+
+    # --- nested / combined ---
+
+    def test_alternatives_inside_optional(self):
+        self.assertEqual(
+            expand_parentheses("set [the] (light|fan)"),
+            sorted(["set light", "set fan", "set the light", "set the fan"])
+        )
+
+    def test_optional_and_alternatives_combined(self):
+        result = expand_parentheses("(turn|switch) [the] (light|fan) (on|off)")
+        self.assertEqual(len(result), 16)  # 2 * 2 * 2 * 2
+        self.assertIn("turn the light on", result)
+        self.assertIn("switch fan off", result)
+
+    def test_entity_with_alternatives(self):
+        self.assertEqual(
+            expand_parentheses("(buy|purchase) {item}"),
+            sorted(["buy {item}", "purchase {item}"])
+        )
+
+    def test_entity_with_optional(self):
+        self.assertEqual(
+            expand_parentheses("eat [some] {fruit}"),
+            sorted(["eat {fruit}", "eat some {fruit}"])
+        )
+
+    # --- whitespace handling ---
+
+    def test_leading_trailing_spaces_stripped(self):
+        for result in expand_parentheses("  hello  "):
+            self.assertEqual(result, result.strip())
+
+    def test_internal_spaces_preserved(self):
+        results = expand_parentheses("(good morning|hi) there")
+        self.assertIn("good morning there", results)
+        self.assertIn("hi there", results)
+
+    # --- deduplication ---
+
+    def test_duplicate_alternatives_deduplicated(self):
+        # (a|a) should produce one "a", not two
+        result = expand_parentheses("(hello|hello)")
+        self.assertEqual(result, ["hello"])
 

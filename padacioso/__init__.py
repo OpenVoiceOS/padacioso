@@ -2,7 +2,7 @@ from typing import List, Iterator, Optional
 
 import simplematch
 
-from padacioso.bracket_expansion import expand_parentheses, normalize_example
+from padacioso.bracket_expansion import expand_parentheses, normalize_example, normalize_utterance, _space_entities
 
 try:
     from ovos_utils.log import LOG
@@ -72,7 +72,8 @@ class IntentContainer:
             raise RuntimeError(f"Attempted to re-register existing intent: {name}")
         expanded = []
         for l in lines:
-            expanded += expand_parentheses(normalize_example(l))
+            for e in expand_parentheses(normalize_example(l)):
+                expanded.append(normalize_utterance(_space_entities(e)))
         regexes = list(set(expanded))
         regexes.sort(key=len, reverse=True)
         self.intent_samples[name] = regexes
@@ -215,6 +216,8 @@ class IntentContainer:
         @param query: input to evaluate for an intent match
         @return: yields dict intent matches
         """
+        query = normalize_utterance(query)
+
         # Lazy cache rebuild - only rebuild once after bulk registration
         # This avoids O(n²) scaling during registration (rebuild on every add)
         if self._cache_dirty:
