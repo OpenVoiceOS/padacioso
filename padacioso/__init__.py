@@ -180,12 +180,13 @@ class IntentContainer:
     def _filter(self, query: str):
         # filter intents based on context/excluded keywords
         excluded_intents = []
-        query_words = set(query.lower().split())
+        q_lower = query.lower()
+        query_words = set(q_lower.split())
         for intent_name, samples in self.excluded_keywords.items():
-            def _kw_hit(kw, _qw=query_words, _q=query):
+            def _kw_hit(kw, _qw=query_words, _ql=q_lower):
                 if ' ' not in kw:
                     return kw.lower() in _qw
-                return bool(re.search(r'\b' + re.escape(kw.lower()) + r'\b', _q))
+                return bool(re.search(r'\b' + re.escape(kw.lower()) + r'\b', _ql))
             if any(_kw_hit(s) for s in samples):
                 excluded_intents.append(intent_name)
         for intent_name, contexts in self.required_contexts.items():
