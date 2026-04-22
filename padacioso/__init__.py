@@ -1,8 +1,37 @@
+import re
 from typing import List, Iterator, Optional
 
 import simplematch
 
 from padacioso.bracket_expansion import expand_parentheses, normalize_example, normalize_utterance, _space_entities
+
+
+def _wildcard_penalty(pattern: str) -> float:
+    """Compute a wildcard penalty proportional to how much of the pattern is wildcards.
+
+    Only `*` tokens are counted; entity placeholders have their own penalty path.
+    Fully literal (or entity-only) patterns return 0.
+    Range: [0.05, 0.25] when any `*` token exists, 0 otherwise.
+    """
+    tokens = pattern.split()
+    if not tokens:
+        return 0.0
+    wildcard_tokens = sum(1 for t in tokens if "*" in t)
+    if wildcard_tokens == 0:
+        return 0.0
+    ratio = wildcard_tokens / len(tokens)
+    return round(0.05 + 0.20 * ratio, 4)
+
+def _patch_nongreedy(matcher) -> None:
+    """Switch named capture groups to non-greedy for multi-entity patterns.
+
+    Prevents the first entity from consuming tokens that belong to later ones
+    when no literal separator exists between placeholders.
+    """
+    fixed = re.sub(r'\(\?P<(\w+)>\.\*\)', r'(?P<\1>.*?)', matcher.regex)
+    if fixed != matcher.regex:
+        matcher.regex = fixed
+
 
 try:
     from ovos_utils.log import LOG
@@ -39,28 +68,32 @@ class IntentContainer:
         # Cache for optimization - pre-built list for fast iteration
         self._intent_list = []  # Pre-built list of (intent_name, regexes)
         self._cache_dirty = True  # Flag to rebuild cache on next query
+        self._regex_penalty = {}  # Per-regex wildcard penalty
+        self._fuzz_variants = {}  # Pre-computed fuzz variants per regex
 
         if "word" not in simplematch.types:
-            LOG.debug(f"Registering `word` type")
+            LOG.debug("Registering `word` type")
             _init_sm_word_type()
 
     @staticmethod
     def _get_fuzzed(sample: str) -> List[str]:
-        """
-        Get fuzzy match examples by allowing a wildcard in place of each
-        specified word.
-        @param sample: Utterance example to mutate
-        @return: list of fuzzy string alternatives to `sample`
-        """
         fuzzed = []
         words = sample.split(" ")
-        for idx in range(0, len(words)):
+        for idx in range(len(words)):
             if "{" in words[idx] or "}" in words[idx]:
                 continue
             new_words = list(words)
             new_words[idx] = "*"
             fuzzed.append(" ".join(new_words))
         return fuzzed + [f"* {sample}", f"{sample} *"]
+
+    @staticmethod
+    def _literal_words(pattern: str) -> frozenset:
+        """Return the set of non-entity, non-wildcard words in a pattern."""
+        return frozenset(
+            w for w in pattern.split()
+            if w != "*" and "{" not in w and "}" not in w
+        )
 
     def add_intent(self, name: str, lines: List[str]):
         """
@@ -71,15 +104,28 @@ class IntentContainer:
         if name in self.intent_samples:
             raise RuntimeError(f"Attempted to re-register existing intent: {name}")
         expanded = []
-        for l in lines:
-            for e in expand_parentheses(normalize_example(l)):
+        for line in lines:
+            for e in expand_parentheses(normalize_example(line)):
                 expanded.append(normalize_utterance(_space_entities(e)))
         regexes = list(set(expanded))
-        regexes.sort(key=len, reverse=True)
+        # literal patterns (no entities, no wildcards) first so they can
+        # short-circuit before greedy entity patterns consume the query
+        regexes.sort(key=lambda r: (0 if "{" not in r and "*" not in r else 1, -len(r)))
         self.intent_samples[name] = regexes
         for r in regexes:
-            self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
-            self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
+            cm = simplematch.Matcher(r, case_sensitive=True)
+            um = simplematch.Matcher(r, case_sensitive=False)
+            if r.count("{") >= 2:
+                _patch_nongreedy(cm)
+                _patch_nongreedy(um)
+            self._cased_matchers[r] = cm
+            self._uncased_matchers[r] = um
+            self._regex_penalty[r] = _wildcard_penalty(r)
+            self._fuzz_variants[r] = (
+                self._get_fuzzed(r),
+                len(r.split()),
+                self._literal_words(r),
+            )
         self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_intent(self, name: str):
@@ -94,6 +140,8 @@ class IntentContainer:
                     self._cased_matchers.pop(rx)
                 if rx in self._uncased_matchers:
                     self._uncased_matchers.pop(rx)
+                self._regex_penalty.pop(rx, None)
+                self._fuzz_variants.pop(rx, None)
             self._cache_dirty = True  # Mark cache as needing rebuild
 
     def add_entity(self, name: str, lines: List[str]):
@@ -106,9 +154,9 @@ class IntentContainer:
             raise RuntimeError(f"Attempted to re-register existing entity: {name}")
         name = name.lower()
         expanded = []
-        for l in lines:
-            expanded += expand_parentheses(l)
-        self.entity_samples[name] = expanded
+        for line in lines:
+            expanded += expand_parentheses(line)
+        self.entity_samples[name] = set(expanded)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_entity(self, name: str):
@@ -132,8 +180,14 @@ class IntentContainer:
     def _filter(self, query: str):
         # filter intents based on context/excluded keywords
         excluded_intents = []
+        q_lower = query.lower()
+        query_words = set(q_lower.split())
         for intent_name, samples in self.excluded_keywords.items():
-            if any(s in query for s in samples):
+            def _kw_hit(kw, _qw=query_words, _ql=q_lower):
+                if ' ' not in kw:
+                    return kw.lower() in _qw
+                return bool(re.search(r'\b' + re.escape(kw.lower()) + r'\b', _ql))
+            if any(_kw_hit(s) for s in samples):
                 excluded_intents.append(intent_name)
         for intent_name, contexts in self.required_contexts.items():
             if intent_name not in self.available_contexts:
@@ -148,15 +202,21 @@ class IntentContainer:
         return excluded_intents
 
     def _match(self, query, intent_name, regexes):
+        query_has_upper = query != query.lower()
         for r in regexes:
-            penalty = 0
-            if "*" in r:
-                # penalize wildcards
-                penalty = 0.15
-            if r not in self._cased_matchers:
-                LOG.warning(f"{r} not initialized")
-                self._cased_matchers[r] = simplematch.Matcher(r, case_sensitive=True)
-            entities = self._cased_matchers[r].match(query)
+            penalty = self._regex_penalty.get(r, 0.0)
+            entities = None
+
+            if query_has_upper:
+                if r not in self._cased_matchers:
+                    LOG.warning(f"{r} not initialized")
+                    cm = simplematch.Matcher(r, case_sensitive=True)
+                    if r.count("{") >= 2:
+                        _patch_nongreedy(cm)
+                    self._cased_matchers[r] = cm
+                    self._regex_penalty.setdefault(r, _wildcard_penalty(r))
+                entities = self._cased_matchers[r].match(query)
+
             if entities is not None:
                 for k, v in entities.items():
                     if k not in self.entity_samples:
@@ -165,29 +225,46 @@ class IntentContainer:
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {}, "conf": 1 - penalty, "name": intent_name}
+                return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name, "_matched_regex": r}
 
             if r not in self._uncased_matchers:
                 LOG.warning(f"{r} not initialized")
-                self._uncased_matchers[r] = simplematch.Matcher(r, case_sensitive=False)
+                um = simplematch.Matcher(r, case_sensitive=False)
+                if r.count("{") >= 2:
+                    _patch_nongreedy(um)
+                self._uncased_matchers[r] = um
+                self._regex_penalty.setdefault(r, _wildcard_penalty(r))
             entities = self._uncased_matchers[r].match(query)
             if entities is not None:
-                # penalize case mismatch
-                penalty += 0.05
+                # query_has_upper + uncased match = genuine case mismatch
+                entity_penalty = 0.04 if not query_has_upper else 0.05
+                if query_has_upper:
+                    penalty += 0.05
                 for k, v in entities.items():
                     if k not in self.entity_samples:
                         # penalize unregistered entities
-                        penalty += 0.05
+                        penalty += entity_penalty
                     elif str(v) not in self.entity_samples[k]:
                         # penalize parsed entity value not in samples
                         penalty += 0.1
-                return {"entities": entities or {}, "conf": 1 - penalty, "name": intent_name}
+                return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name, "_matched_regex": r}
 
         if self.fuzz:
+            query_words = query.split()
+            query_word_set = frozenset(query_words)
+            query_len = len(query_words)
             for r in regexes:
-                penalty = 0.25
-                for s in self._get_fuzzed(r):
-                    entities = self._fuzzy_score(query, s, penalty)
+                variants, pat_len, literal_words = self._fuzz_variants.get(
+                    r, (self._get_fuzzed(r), len(r.split()), self._literal_words(r))
+                )
+                # skip patterns whose length differs too much from the query
+                if abs(pat_len - query_len) > max(2, query_len // 2):
+                    continue
+                # skip patterns with no literal words in common with the query
+                if literal_words and not literal_words.intersection(query_word_set):
+                    continue
+                for s in variants:
+                    entities = self._fuzzy_score(query, s, 0.25)
                     if entities:
                         entities["name"] = intent_name
                         return entities
@@ -233,10 +310,6 @@ class IntentContainer:
             res = self._match(query, intent_name, regexes)
             if res is not None:
                 yield res
-                # Early exit optimization: perfect match found
-                # TODO: Some validation that we don't have duplicates, and warning if we do
-                if res.get("conf", 0) == 1.0:
-                    return
 
     def calc_intent(self, query: str) -> Optional[dict]:
         """
@@ -244,20 +317,52 @@ class IntentContainer:
         @param query: input to evaluate for an intent
         @return: dict matched intent (or None)
         """
+        _GOOD_ENOUGH = 0.95
         match = {"name": None, "entities": {}}
-        intents = [i for i in self.calc_intents(query) if i is not None and i.get("name")]
-        if len(intents) == 0:
+        best_conf = 0.0
+        best_is_literal = False
+        can_short_circuit = False
+        intents = []
+        for res in self.calc_intents(query):
+            if res is None or not res.get("name"):
+                continue
+            conf = res.get("conf", 0)
+            # If we already have a good-enough literal, collect ties but stop
+            # as soon as a lower-confidence candidate arrives so the tie-breaker
+            # always sees every candidate that shares the winning confidence.
+            if can_short_circuit and conf < best_conf:
+                break
+            intents.append(res)
+            if conf > best_conf:
+                best_conf = conf
+                r = res.get("_matched_regex", "")
+                best_is_literal = "{" not in r and "*" not in r
+            # Only arm the short-circuit once we have a literal at >= 0.95.
+            # An entity match at 0.96 must not block a literal (conf=1.0) later.
+            if best_conf >= _GOOD_ENOUGH and best_is_literal:
+                can_short_circuit = True
+
+        if not intents:
             LOG.info("No match")
             return match
 
-        best_conf = max(x.get("conf", 0) for x in intents if x.get("name"))
+        best_conf = max(x.get("conf", 0) for x in intents)
         ties = [i for i in intents if i.get("conf", 0) == best_conf]
 
         if len(ties) > 1:
-            # TODO - how to untie?
-            LOG.info(f"tied intents: {ties}")
+            LOG.info(f"tied intents: {[t['name'] for t in ties]}")
+            def _tie_key(t):
+                r = t.get("_matched_regex", "")
+                is_literal = "{" not in r and "*" not in r
+                return (
+                    0 if is_literal else 1,  # literal beats entity/wildcard
+                    self._regex_penalty.get(r, 1.0),
+                    t["name"],
+                )
+            ties.sort(key=_tie_key)
 
-        match = ties[0]
+        match = dict(ties[0])
+        match.pop("_matched_regex", None)
 
         for entity in set(match["entities"].keys()):
             entities = match["entities"].pop(entity)

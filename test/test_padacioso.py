@@ -92,31 +92,31 @@ class TestIntentContainer(unittest.TestCase):
         container.add_intent('test_int', ['* number {number:int}'])
         self.assertEqual(
             container.calc_intent('i want nuMBer 3'),
-            {'conf': 0.75,  # wildcard + unregistered entity + bad case
+            {'conf': 0.7833,  # proportional wildcard + unregistered entity + bad case
              'entities': {'number': 3}, 'name': 'test_int'})
         self.assertEqual(
             container.calc_intent('i want number 3'),
-            {'conf': 0.81,  # wildcard + unregistered entity
+            {'conf': 0.8433,  # proportional wildcard + unregistered entity
              'entities': {'number': 3}, 'name': 'test_int'})
 
         container.add_entity("number", ["1", "2", "3", "4", "5"])
         self.assertEqual(
             container.calc_intent('i want number 10'),
-            {'conf': 0.75,  # wildcard + unseen entity example
+            {'conf': 0.7833,  # proportional wildcard + unseen entity example
              'entities': {'number': 10}, 'name': 'test_int'})
         self.assertEqual(
             container.calc_intent('i want number 3'),
-            {'conf': 0.85,  # wildcard + registered entity sample
+            {'conf': 0.8833,  # proportional wildcard + registered entity sample
              'entities': {'number': 3}, 'name': 'test_int'})
         self.assertEqual(
             container.calc_intent('i want numBeR 3'),
-            {'conf': 0.8,  # wildcard + registered entity sample + bad case
+            {'conf': 0.8333,  # proportional wildcard + registered entity sample + bad case
              'entities': {'number': 3}, 'name': 'test_int'})
 
         container.add_intent('test_float', ['* float {number:float}'])
         self.assertEqual(
             container.calc_intent('i want float 3'),
-            {'conf': 0.75,   # wildcard + unseen entity example
+            {'conf': 0.7833,   # proportional wildcard + unseen entity example
              'entities': {'number': 3.0}, 'name': 'test_float'})
 
     def test_no_fuzz(self):
@@ -477,4 +477,71 @@ class TestExpandParentheses(unittest.TestCase):
         # (a|a) should produce one "a", not two
         result = expand_parentheses("(hello|hello)")
         self.assertEqual(result, ["hello"])
+
+
+class TestAccuracyImprovements(unittest.TestCase):
+    """Tests for accuracy and speed improvements."""
+
+    def test_keyword_exclusion_word_boundary(self):
+        # "play" keyword must not fire when query contains "display" or "replay"
+        container = IntentContainer()
+        container.add_intent("music", ["play some music"])
+        container.add_intent("display", ["show me the display"])
+        container.exclude_keywords("music", ["play"])
+        # "display" contains "play" as substring — must NOT exclude music via substring
+        result = container.calc_intent("show me the display")
+        self.assertEqual(result["name"], "display")
+        # actual "play" word should still trigger exclusion
+        container2 = IntentContainer()
+        container2.add_intent("music", ["play some music"])
+        container2.add_intent("other", ["do something else"])
+        container2.exclude_keywords("music", ["play"])
+        result2 = container2.calc_intent("play some music")
+        self.assertIsNone(result2["name"])
+
+    def test_confidence_clamped_non_negative(self):
+        # many stacked penalties must never push confidence below 0
+        container = IntentContainer()
+        container.add_intent("test", ["* * * {a} {b} {c}"])
+        result = container.calc_intent("x y z p q r")
+        self.assertGreaterEqual(result.get("conf", 0), 0.0)
+
+    def test_wildcard_penalty_proportional(self):
+        from padacioso import _wildcard_penalty
+        # fully literal — no penalty
+        self.assertEqual(_wildcard_penalty("say hello"), 0.0)
+        # single wildcard out of 2 tokens: ratio=0.5
+        self.assertAlmostEqual(_wildcard_penalty("say *"), 0.15, places=4)
+        # single wildcard out of 3 tokens: ratio=1/3
+        self.assertAlmostEqual(_wildcard_penalty("say * please"), round(0.05 + 0.20 / 3, 4), places=4)
+        # all wildcards: ratio=1.0
+        self.assertAlmostEqual(_wildcard_penalty("* *"), 0.25, places=4)
+        # entity placeholders alone do NOT count as wildcards
+        self.assertEqual(_wildcard_penalty("{item} now"), 0.0)
+
+    def test_multi_entity_no_separator(self):
+        # two adjacent entity slots — non-greedy patch must split correctly
+        container = IntentContainer()
+        container.add_intent("test", ["{first} {last}"])
+        result = container.calc_intent("john doe")
+        self.assertEqual(result["name"], "test")
+        self.assertEqual(result["entities"].get("first"), "john")
+        self.assertEqual(result["entities"].get("last"), "doe")
+
+    def test_tie_breaking_deterministic(self):
+        # Two literal intents that match with equal confidence must resolve
+        # to the alphabetically-first name, regardless of registration order.
+        container = IntentContainer()
+        container.add_intent("beta", ["hello world"])
+        container.add_intent("alpha", ["hello world"])
+        result = container.calc_intent("hello world")
+        # _tie_key sorts by (is_literal=0, penalty=0.0, name) → "alpha" wins
+        self.assertEqual(result["name"], "alpha")
+
+        # Also verify that reversing registration order does not change the winner
+        container2 = IntentContainer()
+        container2.add_intent("alpha", ["hello world"])
+        container2.add_intent("beta", ["hello world"])
+        result2 = container2.calc_intent("hello world")
+        self.assertEqual(result2["name"], "alpha")
 
