@@ -143,13 +143,17 @@ pay the full similarity cost. Prefer `fuzz=False` (the default) for production d
 
 Padacioso ships as an OVOS pipeline plugin (`ovos-padacioso-pipeline-plugin`) and is a drop-in replacement for Padatious when loaded via the plugin manager.
 
-```yaml
-# ~/.config/mycroft/mycroft.conf
-intents:
-  pipeline:
-    - ovos-padacioso-pipeline-plugin-high
-    - ovos-padacioso-pipeline-plugin-medium
-    - ovos-padacioso-pipeline-plugin-low
+```json
+// ~/.config/mycroft/mycroft.conf
+{
+  "intents": {
+    "pipeline": [
+      "ovos-padacioso-pipeline-plugin-high",
+      "ovos-padacioso-pipeline-plugin-medium",
+      "ovos-padacioso-pipeline-plugin-low"
+    ]
+  }
+}
 ```
 
 ## License
