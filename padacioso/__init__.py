@@ -69,6 +69,7 @@ class IntentContainer:
         self._intent_list = []  # Pre-built list of (intent_name, regexes)
         self._cache_dirty = True  # Flag to rebuild cache on next query
         self._regex_penalty = {}  # Per-regex wildcard penalty
+        self._fuzz_variants = {}  # Pre-computed fuzz variants per regex
 
         if "word" not in simplematch.types:
             LOG.debug(f"Registering `word` type")
@@ -76,21 +77,23 @@ class IntentContainer:
 
     @staticmethod
     def _get_fuzzed(sample: str) -> List[str]:
-        """
-        Get fuzzy match examples by allowing a wildcard in place of each
-        specified word.
-        @param sample: Utterance example to mutate
-        @return: list of fuzzy string alternatives to `sample`
-        """
         fuzzed = []
         words = sample.split(" ")
-        for idx in range(0, len(words)):
+        for idx in range(len(words)):
             if "{" in words[idx] or "}" in words[idx]:
                 continue
             new_words = list(words)
             new_words[idx] = "*"
             fuzzed.append(" ".join(new_words))
         return fuzzed + [f"* {sample}", f"{sample} *"]
+
+    @staticmethod
+    def _literal_words(pattern: str) -> frozenset:
+        """Return the set of non-entity, non-wildcard words in a pattern."""
+        return frozenset(
+            w for w in pattern.split()
+            if w != "*" and "{" not in w and "}" not in w
+        )
 
     def add_intent(self, name: str, lines: List[str]):
         """
@@ -116,6 +119,11 @@ class IntentContainer:
             self._cased_matchers[r] = cm
             self._uncased_matchers[r] = um
             self._regex_penalty[r] = _wildcard_penalty(r)
+            self._fuzz_variants[r] = (
+                self._get_fuzzed(r),
+                len(r.split()),
+                self._literal_words(r),
+            )
         self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_intent(self, name: str):
@@ -131,6 +139,7 @@ class IntentContainer:
                 if rx in self._uncased_matchers:
                     self._uncased_matchers.pop(rx)
                 self._regex_penalty.pop(rx, None)
+                self._fuzz_variants.pop(rx, None)
             self._cache_dirty = True  # Mark cache as needing rebuild
 
     def add_entity(self, name: str, lines: List[str]):
@@ -238,10 +247,21 @@ class IntentContainer:
                 return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name, "_matched_regex": r}
 
         if self.fuzz:
+            query_words = query.split()
+            query_word_set = frozenset(query_words)
+            query_len = len(query_words)
             for r in regexes:
-                penalty = 0.25
-                for s in self._get_fuzzed(r):
-                    entities = self._fuzzy_score(query, s, penalty)
+                variants, pat_len, literal_words = self._fuzz_variants.get(
+                    r, (self._get_fuzzed(r), len(r.split()), self._literal_words(r))
+                )
+                # skip patterns whose length differs too much from the query
+                if abs(pat_len - query_len) > max(2, query_len // 2):
+                    continue
+                # skip patterns with no literal words in common with the query
+                if literal_words and not literal_words.intersection(query_word_set):
+                    continue
+                for s in variants:
+                    entities = self._fuzzy_score(query, s, 0.25)
                     if entities:
                         entities["name"] = intent_name
                         return entities

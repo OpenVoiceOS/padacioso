@@ -78,12 +78,16 @@ No-match queries must exhaust every intent; above ~1 000 intents a pre-filter (B
 
 | Query type | `fuzz=False` | `fuzz=True` | Overhead |
 |---|---|---|---|
-| Exact match | 0.46 ms | 12.3 ms | ~27× |
-| Entity match | 0.47 ms | 7.9 ms | ~17× |
-| Near miss | 0.44 ms | 20.8 ms | ~48× |
-| No match | 0.41 ms | 19.6 ms | ~48× |
+| Exact match | 0.57 ms | 2.9 ms | ~5× |
+| Entity match | 0.46 ms | 0.6 ms | ~1.3× |
+| Near miss | 0.42 ms | 8.3 ms | ~20× |
+| No match | 0.42 ms | 0.8 ms | ~2× |
 
-Fuzzy mode generates and scores all single-word substitution variants of every pattern, so it is significantly slower. Use it only when approximate matching is required; prefer `fuzz=False` (the default) for production OVOS deployments.
+Fuzz variants are pre-computed at registration time. Two runtime gates keep per-query work low:
+a **word-count filter** skips patterns whose length differs too much from the query, and a
+**token-overlap filter** skips patterns that share no literal words with the query at all.
+Entity matches and no-match cases benefit most; near-miss queries (partial word overlap) still
+pay the full similarity cost. Prefer `fuzz=False` (the default) for production deployments.
 
 ## OVOS plugin
 
