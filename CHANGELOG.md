@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2a3](https://github.com/OpenVoiceOS/padacioso/tree/1.0.2a3) (2026-04-22)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.2a2...1.0.2a3)
+
+**Merged pull requests:**
+
+- perf/fix: accuracy and speed improvements [\#49](https://github.com/OpenVoiceOS/padacioso/pull/49) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.0.2a2](https://github.com/OpenVoiceOS/padacioso/tree/1.0.2a2) (2026-04-21)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.2a1...1.0.2a2)
