@@ -108,7 +108,9 @@ class IntentContainer:
             for e in expand_parentheses(normalize_example(l)):
                 expanded.append(normalize_utterance(_space_entities(e)))
         regexes = list(set(expanded))
-        regexes.sort(key=len, reverse=True)
+        # literal patterns (no entities, no wildcards) first so they can
+        # short-circuit before greedy entity patterns consume the query
+        regexes.sort(key=lambda r: (0 if "{" not in r and "*" not in r else 1, -len(r)))
         self.intent_samples[name] = regexes
         for r in regexes:
             cm = simplematch.Matcher(r, case_sensitive=True)
@@ -321,14 +323,20 @@ class IntentContainer:
         _GOOD_ENOUGH = 0.95
         match = {"name": None, "entities": {}}
         best_conf = 0.0
+        best_is_literal = False
         intents = []
         for res in self.calc_intents(query):
             if res is None or not res.get("name"):
                 continue
             intents.append(res)
-            if res.get("conf", 0) > best_conf:
-                best_conf = res["conf"]
-            if best_conf >= _GOOD_ENOUGH:
+            conf = res.get("conf", 0)
+            if conf > best_conf:
+                best_conf = conf
+                r = res.get("_matched_regex", "")
+                best_is_literal = "{" not in r and "*" not in r
+            # only short-circuit on a literal match — an entity match at 0.96
+            # must not block a literal match (conf=1.0) in a later intent
+            if best_conf >= _GOOD_ENOUGH and best_is_literal:
                 break
 
         if not intents:
@@ -340,10 +348,15 @@ class IntentContainer:
 
         if len(ties) > 1:
             LOG.info(f"tied intents: {[t['name'] for t in ties]}")
-            ties.sort(key=lambda t: (
-                self._regex_penalty.get(t.get("_matched_regex", ""), 1.0),
-                t["name"]
-            ))
+            def _tie_key(t):
+                r = t.get("_matched_regex", "")
+                is_literal = "{" not in r and "*" not in r
+                return (
+                    0 if is_literal else 1,  # literal beats entity/wildcard
+                    self._regex_penalty.get(r, 1.0),
+                    t["name"],
+                )
+            ties.sort(key=_tie_key)
 
         match = dict(ties[0])
         match.pop("_matched_regex", None)
