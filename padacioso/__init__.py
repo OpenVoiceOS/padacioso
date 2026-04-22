@@ -72,7 +72,7 @@ class IntentContainer:
         self._fuzz_variants = {}  # Pre-computed fuzz variants per regex
 
         if "word" not in simplematch.types:
-            LOG.debug(f"Registering `word` type")
+            LOG.debug("Registering `word` type")
             _init_sm_word_type()
 
     @staticmethod
