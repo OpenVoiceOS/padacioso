@@ -11,17 +11,16 @@ Usage:
     python benchmark/accuracy.py [--fuzz]
 """
 import argparse
+import logging
+import statistics
 import sys
 import time
-import statistics
-import logging
 from collections import defaultdict
 
-logging.disable(logging.CRITICAL)
-
-sys.path.insert(0, ".")
-from padacioso import IntentContainer
-from benchmark.dataset import INTENTS, NO_MATCH_UTTERANCES
+sys.path.insert(0, ".")  # noqa: E402 — must precede local imports
+logging.disable(logging.CRITICAL)  # noqa: E402 — suppress before local imports
+from padacioso import IntentContainer  # noqa: E402
+from benchmark.dataset import INTENTS, NO_MATCH_UTTERANCES  # noqa: E402
 
 
 def build_container(fuzz: bool) -> IntentContainer:
@@ -63,7 +62,6 @@ def run(fuzz: bool):
     true_pos  = sum(1 for _, e, p, _ in results if e is not None and e == p)
     false_neg = sum(1 for _, e, p, _ in results if e is not None and p != e)
     false_pos = sum(1 for _, e, p, _ in results if e is None and p is not None)
-    true_neg  = sum(1 for _, e, p, _ in results if e is None and p is None)
 
     accuracy   = correct / total
     precision  = true_pos / (true_pos + false_pos) if (true_pos + false_pos) else 0
