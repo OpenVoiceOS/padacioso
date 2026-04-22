@@ -11,6 +11,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "jarbasai", email = "jarbasai@mailfence.com" }]
 requires-python = ">=3.8"
 dependencies = [
+    "nebulento",
     "simplematch",
 ]
 
@@ -39,3 +40,10 @@ version = { attr = "padacioso.version.__version__" }
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["padacioso*"]
+
+[dependency-groups]
+dev = [
+    "padaos",
+    "padatious",
+    "rapidfuzz",
+]
