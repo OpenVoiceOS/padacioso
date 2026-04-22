@@ -87,6 +87,25 @@ deterministic, auditable behaviour at the cost of requiring broader training cov
 The natural-language dataset is included (`benchmark/dataset.py`) to make this tradeoff visible
 and to help skill authors understand which phrasings need explicit template coverage.
 
+### Engine comparison (natural language, same dataset)
+
+Run `uv run python benchmark/compare.py` to reproduce. All engines use identical training templates
+and are evaluated on the same 268 natural-language cases.
+
+| Engine | Accuracy | Precision | Recall | F1 | False positives | Query latency |
+|---|---|---|---|---|---|---|
+| padaos (regex) | 25.4% | **100%** | 18.0% | 0.306 | 0 / 24 | 0.10 ms |
+| padacioso `fuzz=False` | 30.2% | **100%** | 23.4% | 0.379 | 0 / 24 | **0.17 ms** |
+| padacioso `fuzz=True` | **51.1%** | 96.7% | **48.0%** | **0.641** | 4 / 24 | 26.9 ms |
+| padatious (neural) | 48.9% | 95.7% | 45.9% | 0.620 | 5 / 24 | 0.79 ms |
+| rapidfuzz token_set_ratio | 42.9% | 94.2% | 39.8% | 0.559 | 6 / 24 | 0.44 ms |
+
+padaos and padacioso `fuzz=False` are the most precise (zero false positives) but only match
+utterances that closely follow the training templates. `fuzz=True` reaches the same recall
+as the neural padatious at lower latency on cache-warm queries, but costs ~27 ms per query.
+For production use, `fuzz=False` is recommended; add `fuzz=True` only when recall on
+natural phrasing matters more than latency.
+
 ## Performance
 
 Benchmarks on a mid-range laptop (single thread, Python 3.11, 500 iterations):
