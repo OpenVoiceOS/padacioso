@@ -104,8 +104,8 @@ class IntentContainer:
         if name in self.intent_samples:
             raise RuntimeError(f"Attempted to re-register existing intent: {name}")
         expanded = []
-        for l in lines:
-            for e in expand_parentheses(normalize_example(l)):
+        for line in lines:
+            for e in expand_parentheses(normalize_example(line)):
                 expanded.append(normalize_utterance(_space_entities(e)))
         regexes = list(set(expanded))
         # literal patterns (no entities, no wildcards) first so they can
@@ -154,8 +154,8 @@ class IntentContainer:
             raise RuntimeError(f"Attempted to re-register existing entity: {name}")
         name = name.lower()
         expanded = []
-        for l in lines:
-            expanded += expand_parentheses(l)
+        for line in lines:
+            expanded += expand_parentheses(line)
         self.entity_samples[name] = set(expanded)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
