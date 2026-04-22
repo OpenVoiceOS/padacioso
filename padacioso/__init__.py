@@ -325,20 +325,26 @@ class IntentContainer:
         match = {"name": None, "entities": {}}
         best_conf = 0.0
         best_is_literal = False
+        can_short_circuit = False
         intents = []
         for res in self.calc_intents(query):
             if res is None or not res.get("name"):
                 continue
-            intents.append(res)
             conf = res.get("conf", 0)
+            # If we already have a good-enough literal, collect ties but stop
+            # as soon as a lower-confidence candidate arrives so the tie-breaker
+            # always sees every candidate that shares the winning confidence.
+            if can_short_circuit and conf < best_conf:
+                break
+            intents.append(res)
             if conf > best_conf:
                 best_conf = conf
                 r = res.get("_matched_regex", "")
                 best_is_literal = "{" not in r and "*" not in r
-            # only short-circuit on a literal match — an entity match at 0.96
-            # must not block a literal match (conf=1.0) in a later intent
+            # Only arm the short-circuit once we have a literal at >= 0.95.
+            # An entity match at 0.96 must not block a literal (conf=1.0) later.
             if best_conf >= _GOOD_ENOUGH and best_is_literal:
-                break
+                can_short_circuit = True
 
         if not intents:
             LOG.info("No match")
