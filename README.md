@@ -56,6 +56,24 @@ container.set_context("purchase", "authenticated")
 container.exclude_keywords("music", ["stop"])
 ```
 
+## Accuracy
+
+Measured on a 269-utterance labelled dataset (244 match cases across 22 intents, 25 deliberate no-match cases).
+Run `python benchmark/accuracy.py` to reproduce.
+
+| Mode | Accuracy | Precision | Recall | F1 | False positives |
+|---|---|---|---|---|---|
+| `fuzz=False` | **97.8%** | **100%** | 97.5% | 0.988 | 0 / 25 (0%) |
+| `fuzz=True` | 97.0% | 98.4% | **98.4%** | 0.984 | 4 / 25 (16%) |
+
+`fuzz=False` achieves perfect precision (zero false positives) at the cost of missing a small
+number of paraphrases not covered by training templates. `fuzz=True` recovers most of those but
+introduces false positives on clearly unrelated utterances due to loose similarity scoring.
+
+The remaining 6 non-fuzz misses are genuine template gaps (e.g. `"play the next song"` matching
+`play_music` instead of `next_track`, `"i need help"` captured by `add_shopping`) — fixable by
+adding one training line each.
+
 ## Performance
 
 Benchmarks on a mid-range laptop (single thread, Python 3.11, 500 iterations):
