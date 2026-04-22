@@ -58,21 +58,34 @@ container.exclude_keywords("music", ["stop"])
 
 ## Accuracy
 
-Measured on a 269-utterance labelled dataset (244 match cases across 22 intents, 25 deliberate no-match cases).
-Run `python benchmark/accuracy.py` to reproduce.
+Run `python benchmark/accuracy.py` to reproduce. 268 test cases: 244 labelled match utterances across 22 intents, 24 deliberate no-match cases.
+
+### Template coverage (utterances close to training patterns)
+
+When test utterances are paraphrases that stay close to the training templates:
 
 | Mode | Accuracy | Precision | Recall | F1 | False positives |
 |---|---|---|---|---|---|
-| `fuzz=False` | **97.8%** | **100%** | 97.5% | 0.988 | 0 / 25 (0%) |
-| `fuzz=True` | 97.0% | 98.4% | **98.4%** | 0.984 | 4 / 25 (16%) |
+| `fuzz=False` | **98.5%** | **100%** | 98.4% | 0.992 | 0 / 24 |
+| `fuzz=True` | 97.8% | 98.4% | 99.2% | 0.988 | 4 / 24 |
 
-`fuzz=False` achieves perfect precision (zero false positives) at the cost of missing a small
-number of paraphrases not covered by training templates. `fuzz=True` recovers most of those but
-introduces false positives on clearly unrelated utterances due to loose similarity scoring.
+### Natural language recall (real human utterances)
 
-The remaining 6 non-fuzz misses are genuine template gaps (e.g. `"play the next song"` matching
-`play_music` instead of `next_track`, `"i need help"` captured by `add_shopping`) — fixable by
-adding one training line each.
+When test utterances are genuinely natural — contractions, idioms, indirect phrasing, British
+colloquialisms — the benchmark uses the same training templates unchanged:
+
+| Mode | Accuracy | Precision | Recall | F1 | False positives |
+|---|---|---|---|---|---|
+| `fuzz=False` | 30% | **100%** | 23% | 0.38 | 0 / 24 |
+| `fuzz=True` | 51% | 97% | 48% | 0.64 | 4 / 24 |
+
+This is expected and by design. Padacioso is a **pattern matcher**, not an NLU engine. It matches
+exactly what its training templates cover. For `"it's dark in here"` to trigger `lights_on`, the
+skill author must add that phrasing (or a generalisation of it) to the intent file. This gives
+deterministic, auditable behaviour at the cost of requiring broader training coverage.
+
+The natural-language dataset is included (`benchmark/dataset.py`) to make this tradeoff visible
+and to help skill authors understand which phrasings need explicit template coverage.
 
 ## Performance
 
