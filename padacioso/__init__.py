@@ -310,10 +310,6 @@ class IntentContainer:
             res = self._match(query, intent_name, regexes)
             if res is not None:
                 yield res
-                # Early exit optimization: perfect match found
-                # TODO: Some validation that we don't have duplicates, and warning if we do
-                if res.get("conf", 0) == 1.0:
-                    return
 
     def calc_intent(self, query: str) -> Optional[dict]:
         """

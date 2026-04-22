@@ -529,11 +529,19 @@ class TestAccuracyImprovements(unittest.TestCase):
         self.assertEqual(result["entities"].get("last"), "doe")
 
     def test_tie_breaking_deterministic(self):
-        # two intents with equal confidence must always return the same one
+        # Two literal intents that match with equal confidence must resolve
+        # to the alphabetically-first name, regardless of registration order.
         container = IntentContainer()
-        container.add_intent("alpha", ["hello world"])
         container.add_intent("beta", ["hello world"])
-        first = container.calc_intent("hello world")
-        second = container.calc_intent("hello world")
-        self.assertEqual(first["name"], second["name"])
+        container.add_intent("alpha", ["hello world"])
+        result = container.calc_intent("hello world")
+        # _tie_key sorts by (is_literal=0, penalty=0.0, name) → "alpha" wins
+        self.assertEqual(result["name"], "alpha")
+
+        # Also verify that reversing registration order does not change the winner
+        container2 = IntentContainer()
+        container2.add_intent("alpha", ["hello world"])
+        container2.add_intent("beta", ["hello world"])
+        result2 = container2.calc_intent("hello world")
+        self.assertEqual(result2["name"], "alpha")
 
