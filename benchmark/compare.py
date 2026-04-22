@@ -128,7 +128,7 @@ def run_padaos(cases):
 
     m = compute_metrics(results, cases)
     print_report("padaos  (regex, no fuzz)", m, latencies, train_ms)
-    return m, statistics.median(latencies), train_ms
+    return m, statistics.median(latencies), statistics.mean(latencies), train_ms
 
 
 def run_padacioso(cases, fuzz):
@@ -147,7 +147,7 @@ def run_padacioso(cases, fuzz):
     label = f"padacioso  fuzz={'True ' if fuzz else 'False'}"
     m = compute_metrics(results, cases)
     print_report(label, m, latencies)
-    return m, statistics.median(latencies), None
+    return m, statistics.median(latencies), statistics.mean(latencies), None
 
 
 def run_padatious(cases, threshold=0.5):
@@ -170,7 +170,7 @@ def run_padatious(cases, threshold=0.5):
 
     m = compute_metrics(results, cases)
     print_report(f"padatious  (neural, threshold={threshold})", m, latencies, train_ms)
-    return m, statistics.median(latencies), train_ms
+    return m, statistics.median(latencies), statistics.mean(latencies), train_ms
 
 
 def run_nebulento(cases, strategy_name, threshold=0.5):
@@ -192,22 +192,21 @@ def run_nebulento(cases, strategy_name, threshold=0.5):
     m = compute_metrics(results, cases)
     label = f"nebulento  {strategy_name.lower().replace('_', '-')}"
     print_report(label, m, latencies)
-    return m, statistics.median(latencies), None
+    return m, statistics.median(latencies), statistics.mean(latencies), None
 
 
 # ── summary table ──────────────────────────────────────────────────────────
 
 def summary(rows):
-    """rows: list of (label, metrics, median_lat_ms, train_ms_or_None)"""
-    print(f"\n\n{'─'*82}")
-    print(f"  {'Engine':<36} {'Acc':>6} {'Prec':>6} {'Recall':>7} {'F1':>6}  {'FP':>4}  {'Lat':>8}  {'RTF':>8}")
-    print(f"{'─'*82}")
-    for label, m, lat, train_ms in rows:
-        rtf = f"{(lat / 1000):.2e}" if lat else "—"
+    """rows: list of (label, metrics, median_lat_ms, mean_lat_ms, train_ms_or_None)"""
+    print(f"\n\n{'─'*84}")
+    print(f"  {'Engine':<36} {'Acc':>6} {'Prec':>6} {'Recall':>7} {'F1':>6}  {'FP':>4}  {'Median':>8}  {'Mean':>8}")
+    print(f"{'─'*84}")
+    for label, m, median_lat, mean_lat, train_ms in rows:
         print(f"  {label:<36} {m['accuracy']:>5.1%} {m['precision']:>5.1%} "
-              f"{m['recall']:>6.1%} {m['f1']:>5.3f}  {m['fp']:>4}  {lat:>6.2f}ms  {rtf:>8}")
-    print(f"{'─'*82}")
-    print(f"  FP = false positives on no-match | Lat = median query latency | RTF = latency/1000 (real-time factor)")
+              f"{m['recall']:>6.1%} {m['f1']:>5.3f}  {m['fp']:>4}  {median_lat:>6.2f}ms  {mean_lat:>6.2f}ms")
+    print(f"{'─'*84}")
+    print(f"  FP = false positives on no-match | Median/Mean = query latency in ms")
 
 
 # ── main ───────────────────────────────────────────────────────────────────
@@ -220,21 +219,21 @@ if __name__ == "__main__":
     print(f"Note    : test utterances are natural human phrasing, NOT template fills.")
 
     rows = []
-    m, lat, tr = run_padaos(cases)
-    rows.append(("padaos  (regex)", m, lat, tr))
+    m, lat, mean_lat, tr = run_padaos(cases)
+    rows.append(("padaos  (regex)", m, lat, mean_lat, tr))
 
-    m, lat, tr = run_padacioso(cases, fuzz=False)
-    rows.append(("padacioso  fuzz=False", m, lat, tr))
+    m, lat, mean_lat, tr = run_padacioso(cases, fuzz=False)
+    rows.append(("padacioso  fuzz=False", m, lat, mean_lat, tr))
 
-    m, lat, tr = run_padacioso(cases, fuzz=True)
-    rows.append(("padacioso  fuzz=True", m, lat, tr))
+    m, lat, mean_lat, tr = run_padacioso(cases, fuzz=True)
+    rows.append(("padacioso  fuzz=True", m, lat, mean_lat, tr))
 
-    m, lat, tr = run_padatious(cases, threshold=0.5)
-    rows.append(("padatious  neural  threshold=0.5", m, lat, tr))
+    m, lat, mean_lat, tr = run_padatious(cases, threshold=0.5)
+    rows.append(("padatious  neural  threshold=0.5", m, lat, mean_lat, tr))
 
     from nebulento.fuzz import MatchStrategy
     for strategy in MatchStrategy:
-        m, lat, tr = run_nebulento(cases, strategy_name=strategy.name, threshold=0.5)
-        rows.append((f"nebulento  {strategy.name.lower().replace('_', '-')}", m, lat, tr))
+        m, lat, mean_lat, tr = run_nebulento(cases, strategy_name=strategy.name, threshold=0.5)
+        rows.append((f"nebulento  {strategy.name.lower().replace('_', '-')}", m, lat, mean_lat, tr))
 
     summary(rows)
