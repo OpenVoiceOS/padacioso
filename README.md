@@ -74,6 +74,17 @@ Benchmarks on a mid-range laptop (single thread, Python 3.11, 500 iterations):
 Matched queries short-circuit at 0.95 confidence, so they scan only a fraction of the intent list.
 No-match queries must exhaust every intent; above ~1 000 intents a pre-filter (BM25 or token-set) would help.
 
+### Fuzzy vs non-fuzzy (20 intents)
+
+| Query type | `fuzz=False` | `fuzz=True` | Overhead |
+|---|---|---|---|
+| Exact match | 0.46 ms | 12.3 ms | ~27× |
+| Entity match | 0.47 ms | 7.9 ms | ~17× |
+| Near miss | 0.44 ms | 20.8 ms | ~48× |
+| No match | 0.41 ms | 19.6 ms | ~48× |
+
+Fuzzy mode generates and scores all single-word substitution variants of every pattern, so it is significantly slower. Use it only when approximate matching is required; prefer `fuzz=False` (the default) for production OVOS deployments.
+
 ## OVOS plugin
 
 Padacioso ships as an OVOS pipeline plugin (`ovos-padacioso-pipeline-plugin`) and is a drop-in replacement for Padatious when loaded via the plugin manager.
