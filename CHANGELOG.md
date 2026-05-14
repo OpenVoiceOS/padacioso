@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0a1](https://github.com/OpenVoiceOS/padacioso/tree/1.1.0a1) (2026-05-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.2a3...1.1.0a1)
+
+**Merged pull requests:**
+
+- feat\(test\): ovoscope end-to-end tests for PadaciosoPipeline [\#51](https://github.com/OpenVoiceOS/padacioso/pull/51) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.0.2a3](https://github.com/OpenVoiceOS/padacioso/tree/1.0.2a3) (2026-04-22)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.2a2...1.0.2a3)
