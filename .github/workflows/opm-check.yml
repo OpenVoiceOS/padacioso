@@ -11,8 +11,8 @@ jobs:
     with:
       python_version: '3.11'
       install_extras: 'extras'
-      plugin_type: 'auto'
-      entry_point: '"ovos-padacioso-pipeline-plugin"'
+      plugin_type: 'pipeline'
+      entry_point: 'ovos-padacioso-pipeline-plugin'
       opm_require_found: true
       opm_validate_interface: true
       opm_test_import: true
