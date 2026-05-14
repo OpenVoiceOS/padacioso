@@ -60,7 +60,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         langs = core_config.get('secondary_langs') or []
         if self.lang not in langs:
             langs.append(self.lang)
-        langs = [standardize_lang_tag(l) for l in langs]
+        langs = [standardize_lang_tag(lang) for lang in langs]
         self.conf_high = self.config.get("conf_high") or 0.95
         self.conf_med = self.config.get("conf_med") or 0.8
         self.conf_low = self.config.get("conf_low") or 0.5
