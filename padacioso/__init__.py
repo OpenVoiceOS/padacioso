@@ -418,3 +418,8 @@ def _init_sm_word_type():
     """
     regex = r"[a-zA-Z0-9]+"
     simplematch.register_type("word", regex)
+
+
+# Re-export DomainIntentContainer at the package root for parity with
+# nebulento and ovos-padatious.
+from padacioso.domain_engine import DomainIntentContainer  # noqa: E402, F401
