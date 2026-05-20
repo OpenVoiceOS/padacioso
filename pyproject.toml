@@ -33,6 +33,7 @@ Homepage = "https://github.com/OpenVoiceOS/padacioso"
 
 [project.entry-points."opm.pipeline"]
 "ovos-padacioso-pipeline-plugin" = "padacioso.opm:PadaciosoPipeline"
+"ovos-padacioso-domain-pipeline" = "padacioso.opm:DomainPadaciosoPipeline"
 
 [tool.setuptools.dynamic]
 version = { attr = "padacioso.version.__version__" }
