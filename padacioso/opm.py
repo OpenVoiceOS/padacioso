@@ -419,35 +419,19 @@ class DomainPadaciosoPipeline(PadaciosoPipeline):
                               name: str, samples: List[str]) -> None:
         domain = self._domain_of(name)
         container.register_domain_intent(domain, name, samples)
-        # Seed the top-level domain classifier with these samples so the
-        # router can pick this domain at query time.
-        try:
-            container.domain_engine.add_intent(domain, samples)
-        except RuntimeError:
-            # Re-registration on skill reload — refresh by removing first.
-            try:
-                container.domain_engine.remove_intent(domain)
-            except Exception:
-                pass
-            container.domain_engine.add_intent(domain, samples)
 
     def _container_add_entity(self, container: DomainIntentContainer,
                               name: str, samples: List[str]) -> None:
         # Entities are shared across domains: add to every existing
-        # sub-container and to the router so templates resolve uniformly.
+        # sub-container so templates resolve uniformly.
         for sub in container.domains.values():
             sub.add_entity(name, samples)
-        try:
-            container.domain_engine.add_entity(name, samples)
-        except Exception:
-            pass
 
     def _container_remove_intent(self, container: DomainIntentContainer,
                                   name: str) -> None:
         domain = self._domain_of(name)
         container.remove_domain_intent(domain, name)
-        # If the domain has no remaining intents, drop the domain entry
-        # so the router stops voting for it.
+        # If the domain has no remaining intents, drop the domain entry.
         sub = container.domains.get(domain)
         if sub is not None and not getattr(sub, "intent_samples", {}):
             container.remove_domain(domain)
@@ -459,10 +443,6 @@ class DomainPadaciosoPipeline(PadaciosoPipeline):
                 sub.remove_entity(name)
             except Exception:
                 pass
-        try:
-            container.domain_engine.remove_entity(name)
-        except Exception:
-            pass
 
     def _container_has_intent(self, container: DomainIntentContainer,
                               name: str) -> bool:

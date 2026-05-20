@@ -3,9 +3,9 @@
 This page documents two layers that ship together:
 
 * **`DomainPadaciosoPipeline`** — the OPM-discoverable pipeline class. Entry point: `ovos-padacioso-domain-pipeline`. Subclasses the flat `PadaciosoPipeline`; the only differences are the container shape (below) and that intents are routed to a domain == `skill_id` at registration time.
-* **`DomainIntentContainer`** — the hierarchical, two-level variant of `IntentContainer` used internally by that pipeline.
+* **`DomainIntentContainer`** — the parallel-argmax variant of `IntentContainer` used internally by that pipeline.
 
-A separate entry point (rather than a `domain_engine: true` config flag on the flat pipeline) keeps the two pipelines independently selectable in `default_pipeline` ordering and lets each have its own `intents.<key>` config block.
+A separate entry point (rather than a config flag on the flat pipeline) keeps the two pipelines independently selectable in `default_pipeline` ordering and lets each have its own `intents.<key>` config block.
 
 ## Enabling
 
@@ -28,16 +28,19 @@ Add it to your OVOS config and place it in your pipeline order alongside (or in 
 
 Configuration keys are read from `intents.ovos_padacioso_domain_pipeline`. The pipeline accepts every key the flat plugin does (`fuzz`, `workers`, `conf_high`, `conf_med`, `conf_low`).
 
-## Hierarchical container
+## Domain container
 
-`DomainIntentContainer` is the hierarchical variant of `IntentContainer`. Intents are grouped into *domains*, and at inference time the engine first picks the most likely domain via the top-level classifier, then resolves the intent inside that domain only. This mirrors the API shipped by sibling OVOS intent plugins (`nebulento.DomainIntentContainer`, `ovos_padatious.DomainIntentContainer`, `palavreado.DomainIntentContainer`, `ovos_m2v_pipeline.DomainPrototypeIntentStore`).
+`DomainIntentContainer` groups intents into *domains* (one sub-container per domain) and evaluates every domain in parallel at inference time, returning the global argmax. This mirrors the parallel-argmax pattern shipped by sibling OVOS intent engines (adapt, `nebulento.DomainIntentContainer`, `ovos_padatious.DomainIntentContainer`, `palavreado.DomainIntentContainer`, `ovos_m2v_pipeline.DomainPrototypeIntentStore`).
 
-## Why hierarchical
+There is intentionally no top-level "router" container. Strict regex matching is the wrong tool for routing: paraphrases that don't match any router template would block the sub-stage from ever running, even when a domain has a perfect template hit. Parallel evaluation is strictly more permissive and — for padacioso — practically free.
 
-Two-level matching gives two concrete benefits:
+## Why grouped by domain
 
-1. **Smaller per-domain containers** — per-query work scales with the size of the matched domain rather than the total intent count.
-2. **Lower far-OOD false-positive rate** — the top-level router rejects chitchat that doesn't strongly match any domain *before* any sub-container is scanned.
+Two concrete benefits over a flat container:
+
+1. **Targeted scoping** — `calc_intent(query, domain=...)` evaluates a single sub-container, useful for session/context-driven scoping where the caller already knows the active domain.
+2. **Cheap prefilter** — domains whose templates share zero literal tokens with the utterance are skipped before any regex runs.
+3. **Short-circuit on decisive match** — padacioso hits literal templates at 0.95 confidence; the first such hit ends the scan.
 
 ## Routing
 
@@ -47,28 +50,30 @@ Padatious intents follow the convention `<skill_id>:<intent_name>`. The domain p
               utterance
                  │
                  ▼
-        ┌──────────────────┐
-        │  domain_engine   │  IntentContainer (router)
-        └──────────────────┘
+   ┌─────────────────────────────────┐
+   │  prefilter by literal tokens    │
+   └─────────────────────────────────┘
                  │
-            best domain
+       candidate domains
                  │
                  ▼
-        ┌──────────────────┐
-        │ domains[<name>]  │  IntentContainer (per-domain intents)
-        └──────────────────┘
+   ┌─────────────────────────────────┐
+   │ domains[d1].calc_intent(query)  │
+   │ domains[d2].calc_intent(query)  │  parallel argmax
+   │ domains[d3].calc_intent(query)  │
+   └─────────────────────────────────┘
                  │
+        best by confidence
+                 │
+                 ▼
            PadaciosoIntent
 ```
 
-Every `padatious:register_intent` does two things:
+Every `padatious:register_intent` adds the templates to the domain's `IntentContainer` (`domains[skill_id]`) under the full `skill_id:intent` label.
 
-* Adds the templates to the domain's `IntentContainer` (`domains[skill_id]`) under the full `skill_id:intent` label.
-* Seeds the same templates under the domain name in the top-level `domain_engine`; the router learns the domain's surface forms incrementally.
+Entities are shared across domains: a `padatious:register_entity` adds the entity to every sub-container.
 
-Entities are shared across domains: a `padatious:register_entity` adds the entity to every sub-container and to the router.
-
-`detach_intent` removes only the named intent from its domain; if the domain is left empty, the domain entry is dropped from the router as well. `detach_skill` removes the whole domain in one shot.
+`detach_intent` removes only the named intent from its domain; if the domain is left empty, the domain entry is dropped. `detach_skill` removes the whole domain in one shot.
 
 ## Programmatic usage
 
@@ -81,22 +86,23 @@ d.register_domain_intent("media", "play",
 d.register_domain_intent("home", "lights_on",
                           ["lights on", "turn on the lights"])
 
-# Seed the router with representative utterances per domain.
-d.domain_engine.add_intent("media",
-                            ["play {song}", "put on {song}"])
-d.domain_engine.add_intent("home",
-                            ["lights on", "turn on the lights"])
-
 d.calc_intent("play some jazz")
-# {'name': 'play', ..., 'conf': 0.85}
+# {'name': 'play', ..., 'conf': 0.95}
 ```
 
-### Bypassing the router
+### Scoping to a single domain
 
-Pass `domain=...` to `calc_intent` to skip the top-level classifier and resolve directly inside a specific domain — useful for session/context-driven scoping where the caller already knows the active domain:
+Pass `domain=...` to `calc_intent` to evaluate only that domain — useful for session/context-driven scoping where the caller already knows the active domain:
 
 ```python
 d.calc_intent("play some jazz", domain="media")
+```
+
+### Top-K matches
+
+```python
+d.calc_intents("play some jazz", top_k=3)
+# [{'name': 'play', 'conf': 0.95, ...}, ...]
 ```
 
 ## See also

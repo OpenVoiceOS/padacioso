@@ -69,9 +69,8 @@ class TestDomainRegistrationRouting(_DomainHarness):
                       container.domains[SMARTHOME].intent_samples)
         self.assertIn(f"{MEDIA}:music",
                       container.domains[MEDIA].intent_samples)
-        # Router has been seeded with one entry per domain.
-        self.assertIn(SMARTHOME, container.domain_engine.intent_samples)
-        self.assertIn(MEDIA, container.domain_engine.intent_samples)
+        # Parallel-argmax: no top-level router; both domains are live.
+        self.assertEqual(set(container.domains), {SMARTHOME, MEDIA})
         detach_skill(self.bus, SMARTHOME)
         detach_skill(self.bus, MEDIA)
 
