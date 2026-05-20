@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List
 
-from ovos_utils.bracket_expansion import expand_template, expand_slots
+from padacioso._bracket_expansion import expand_template, expand_slots
 
 
 def expand_parentheses(sent: str) -> List[str]:
@@ -9,7 +9,7 @@ def expand_parentheses(sent: str) -> List[str]:
     Expand a template string with ``(a|b)`` alternatives and ``[optional]``
     syntax into all possible combinations.
 
-    Delegates to :func:`ovos_utils.bracket_expansion.expand_template` so that
+    Delegates to :func:`padacioso._bracket_expansion.expand_template` so that
     OVOS template semantics stay consistent across plugins.  Internal whitespace
     introduced by an empty ``[optional]`` branch is collapsed so that a single
     space separates tokens.
@@ -29,7 +29,7 @@ def expand_template_slots(template: str,
     """
     Expand ``(a|b)``/``[opt]`` template and substitute ``{slot}`` placeholders.
 
-    Thin wrapper around :func:`ovos_utils.bracket_expansion.expand_slots` that
+    Thin wrapper around :func:`padacioso._bracket_expansion.expand_slots` that
     additionally collapses any double whitespace introduced by empty optional
     branches.
     """

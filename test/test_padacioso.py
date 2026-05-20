@@ -480,12 +480,12 @@ class TestExpandParentheses(unittest.TestCase):
 
     # --- canonical ovos_utils delegation ---
 
-    def test_matches_ovos_utils_expand_template(self):
-        # padacioso must produce the same expansions as the canonical
-        # ovos_utils.bracket_expansion.expand_template (modulo whitespace
-        # collapse from empty optional branches).
+    def test_matches_expand_template(self):
+        # padacioso must produce the same expansions as the underlying
+        # expand_template helper (modulo whitespace collapse from empty
+        # optional branches).
         import re as _re
-        from ovos_utils.bracket_expansion import expand_template
+        from padacioso._bracket_expansion import expand_template
         sample = "turn (on|off) the [bright] lights"
         canonical = sorted({
             _re.sub(r" +", " ", e).strip() for e in expand_template(sample)
