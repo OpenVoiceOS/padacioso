@@ -478,6 +478,60 @@ class TestExpandParentheses(unittest.TestCase):
         result = expand_parentheses("(hello|hello)")
         self.assertEqual(result, ["hello"])
 
+    # --- canonical ovos_utils delegation ---
+
+    def test_matches_ovos_utils_expand_template(self):
+        # padacioso must produce the same expansions as the canonical
+        # ovos_utils.bracket_expansion.expand_template (modulo whitespace
+        # collapse from empty optional branches).
+        import re as _re
+        from ovos_utils.bracket_expansion import expand_template
+        sample = "turn (on|off) the [bright] lights"
+        canonical = sorted({
+            _re.sub(r" +", " ", e).strip() for e in expand_template(sample)
+        })
+        self.assertEqual(expand_parentheses(sample), canonical)
+
+
+class TestEndToEndTemplateExpansion(unittest.TestCase):
+    """End-to-end OVOS template support: (a|b), [opt], {slot}."""
+
+    def test_register_intent_expands_alternatives_and_optionals(self):
+        container = IntentContainer()
+        container.add_intent("lights", ["turn (on|off) the [bright] lights"])
+        self.assertEqual(
+            sorted(container.intent_samples["lights"]),
+            sorted([
+                "turn on the lights",
+                "turn off the lights",
+                "turn on the bright lights",
+                "turn off the bright lights",
+            ]),
+        )
+
+    def test_slot_placeholders_preserved_through_expansion(self):
+        container = IntentContainer()
+        container.add_intent("buy", ["(buy|purchase) [some] {item}"])
+        samples = container.intent_samples["buy"]
+        # all four combinations exist and each still contains the {item} slot
+        self.assertEqual(len(samples), 4)
+        for s in samples:
+            self.assertIn("{item}", s)
+
+    def test_expand_template_slots_helper(self):
+        from padacioso.bracket_expansion import expand_template_slots
+        out = expand_template_slots(
+            "turn (on|off) the {device}",
+            {"device": ["lights", "fan"]},
+        )
+        self.assertEqual(
+            sorted(out),
+            sorted([
+                "turn on the lights", "turn off the lights",
+                "turn on the fan", "turn off the fan",
+            ]),
+        )
+
 
 class TestAccuracyImprovements(unittest.TestCase):
     """Tests for accuracy and speed improvements."""

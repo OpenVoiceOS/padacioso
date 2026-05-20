@@ -1,44 +1,41 @@
-import itertools
 import re
+from typing import Dict, List
+
+from ovos_utils.bracket_expansion import expand_template, expand_slots
 
 
-def expand_parentheses(sent: str) -> list:
+def expand_parentheses(sent: str) -> List[str]:
     """
-    Expand a template string with (a|b) alternatives and [optional] syntax
-    into all possible combinations.
+    Expand a template string with ``(a|b)`` alternatives and ``[optional]``
+    syntax into all possible combinations.
+
+    Delegates to :func:`ovos_utils.bracket_expansion.expand_template` so that
+    OVOS template semantics stay consistent across plugins.  Internal whitespace
+    introduced by an empty ``[optional]`` branch is collapsed so that a single
+    space separates tokens.
 
     Examples:
         "Will it (rain|pour) [today]?" ->
             ["Will it rain today?", "Will it rain?",
              "Will it pour today?", "Will it pour?"]
     """
-    def _expand_optional(text):
-        return re.sub(r"\[([^\[\]]+)\]", lambda m: f"({m.group(1)}|)", text)
+    expansions = expand_template(sent)
+    cleaned = {re.sub(r" +", " ", e).strip() for e in expansions}
+    return sorted(cleaned)
 
-    def _expand_alternatives(text):
-        parts = []
-        for segment in re.split(r"(\([^\(\)]+\))", text):
-            if segment.startswith("(") and segment.endswith(")"):
-                parts.append(segment[1:-1].split("|"))
-            else:
-                parts.append([segment])
-        return itertools.product(*parts)
 
-    def _fully_expand(texts):
-        result = set(texts)
-        while True:
-            expanded = set()
-            for text in result:
-                for combo in _expand_alternatives(text):
-                    # collapse internal whitespace so the empty branch of
-                    # [optional] doesn't leave a double space
-                    expanded.add(re.sub(r' +', ' ', "".join(combo)).strip())
-            if expanded == result:
-                break
-            result = expanded
-        return sorted(result)
+def expand_template_slots(template: str,
+                          slots: Dict[str, List[str]]) -> List[str]:
+    """
+    Expand ``(a|b)``/``[opt]`` template and substitute ``{slot}`` placeholders.
 
-    return _fully_expand([_expand_optional(sent)])
+    Thin wrapper around :func:`ovos_utils.bracket_expansion.expand_slots` that
+    additionally collapses any double whitespace introduced by empty optional
+    branches.
+    """
+    expansions = expand_slots(template, slots)
+    cleaned = {re.sub(r" +", " ", e).strip() for e in expansions}
+    return sorted(cleaned)
 
 
 def clean_braces(example: str) -> str:
