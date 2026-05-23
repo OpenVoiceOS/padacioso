@@ -3,7 +3,12 @@ from typing import List, Iterator, Optional
 
 import simplematch
 
-from padacioso.bracket_expansion import expand_parentheses, normalize_example, normalize_utterance, _space_entities
+from padacioso.bracket_expansion import (
+    _expand_parentheses_impl as expand_parentheses,
+    normalize_example,
+    normalize_utterance,
+    _space_entities,
+)
 
 
 def _wildcard_penalty(pattern: str) -> float:
