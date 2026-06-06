@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1a1](https://github.com/OpenVoiceOS/padacioso/tree/1.1.1a1) (2026-06-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.1.0a1...1.1.1a1)
+
+**Merged pull requests:**
+
+- fix\(deps\): allow ovos-bus-client 2.x \(widen cap to \<3.0.0\) [\#56](https://github.com/OpenVoiceOS/padacioso/pull/56) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.1.0a1](https://github.com/OpenVoiceOS/padacioso/tree/1.1.0a1) (2026-05-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.2a3...1.1.0a1)
