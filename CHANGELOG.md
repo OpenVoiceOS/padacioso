@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.0.0a1) (2026-06-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.1.1a1...2.0.0a1)
+
+**Breaking changes:**
+
+- feat!: enforce OVOS-INTENT-1 grammar and normalization via ovos-spec-tools [\#55](https://github.com/OpenVoiceOS/padacioso/pull/55) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.1.1a1](https://github.com/OpenVoiceOS/padacioso/tree/1.1.1a1) (2026-06-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.1.0a1...1.1.1a1)
