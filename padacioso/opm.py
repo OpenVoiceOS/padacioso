@@ -4,15 +4,14 @@ from functools import lru_cache
 from os.path import isfile
 from typing import Optional, Dict, List, Union
 
-from langcodes import closest_match
 from ovos_bus_client.client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
+from ovos_spec_tools import closest_lang, standardize_lang
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
-from ovos_utils.lang import standardize_lang_tag
 from ovos_utils.log import LOG, log_deprecation
 
 from padacioso import IntentContainer as FallbackIntentContainer
@@ -56,11 +55,11 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         super().__init__(config=config or {}, bus=bus)
 
         core_config = Configuration()
-        self.lang = standardize_lang_tag(core_config.get("lang", "en-US"))
+        self.lang = standardize_lang(core_config.get("lang", "en-US"))
         langs = core_config.get('secondary_langs') or []
         if self.lang not in langs:
             langs.append(self.lang)
-        langs = [standardize_lang_tag(lang) for lang in langs]
+        langs = [standardize_lang(lang) for lang in langs]
         self.conf_high = self.config.get("conf_high") or 0.95
         self.conf_med = self.config.get("conf_med") or 0.8
         self.conf_low = self.config.get("conf_low") or 0.5
@@ -102,7 +101,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         LOG.debug(f'Padacioso Matching confidence > {limit}')
         # call flatten in case someone is sending the old style list of tuples
         utterances = flatten_list(utterances)
-        lang = standardize_lang_tag(lang or self.lang)
+        lang = standardize_lang(lang or self.lang)
         padacioso_intent = self.calc_intent(utterances, lang, message)
         if padacioso_intent is not None and padacioso_intent.conf > limit:
             skill_id = padacioso_intent.name.split(':')[0]
@@ -213,7 +212,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             message (Message): message triggering action
         """
         lang = message.data.get('lang', self.lang)
-        lang = standardize_lang_tag(lang)
+        lang = standardize_lang(lang)
         if lang in self.containers:
             self.registered_intents.append(message.data['name'])
             try:
@@ -232,7 +231,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             message (Message): message triggering action
         """
         lang = message.data.get('lang', self.lang)
-        lang = standardize_lang_tag(lang)
+        lang = standardize_lang(lang)
         if lang in self.containers:
             self.registered_entities.append(message.data)
             self._register_object(message, 'entity',
@@ -273,14 +272,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
 
     def _get_closest_lang(self, lang: str) -> Optional[str]:
         if self.containers:
-            lang = standardize_lang_tag(lang)
-            closest, score = closest_match(lang, list(self.containers.keys()))
-            # https://langcodes-hickford.readthedocs.io/en/sphinx/index.html#distance-values
-            # 0 -> These codes represent the same language, possibly after filling in values and normalizing.
-            # 1- 3 -> These codes indicate a minor regional difference.
-            # 4 - 10 -> These codes indicate a significant but unproblematic regional difference.
-            if score < 10:
-                return closest
+            return closest_lang(lang, list(self.containers.keys()))
         return None
 
     def shutdown(self):

@@ -3,7 +3,25 @@ from typing import List, Iterator, Optional
 
 import simplematch
 
-from padacioso.bracket_expansion import expand_parentheses, normalize_example, normalize_utterance, _space_entities
+from ovos_spec_tools import expand, normalize_for_match
+
+
+def _normalize(text: str) -> str:
+    """Canonical OVOS-INTENT-1 match normalization.
+
+    Delegates to :func:`ovos_spec_tools.normalize_for_match` (lowercase,
+    diacritic/punctuation folding, ``{slot}`` markers preserved) and collapses
+    internal whitespace exactly as the spec expander does (§4.1). Applied to
+    both samples and queries so the two sides compare consistently.
+
+    The ``*`` wildcard token is structural (consumed by simplematch, never
+    present in a real utterance) so it is passed through verbatim rather than
+    folded away as punctuation.
+    """
+    normed = []
+    for token in text.split():
+        normed.append(token if token == "*" else normalize_for_match(token))
+    return " ".join(t for t in normed if t)
 
 
 def _wildcard_penalty(pattern: str) -> float:
@@ -105,8 +123,8 @@ class IntentContainer:
             raise RuntimeError(f"Attempted to re-register existing intent: {name}")
         expanded = []
         for line in lines:
-            for e in expand_parentheses(normalize_example(line)):
-                expanded.append(normalize_utterance(_space_entities(e)))
+            for e in expand(line):
+                expanded.append(_normalize(e))
         regexes = list(set(expanded))
         # literal patterns (no entities, no wildcards) first so they can
         # short-circuit before greedy entity patterns consume the query
@@ -155,7 +173,7 @@ class IntentContainer:
         name = name.lower()
         expanded = []
         for line in lines:
-            expanded += expand_parentheses(line)
+            expanded += expand(line)
         self.entity_samples[name] = set(expanded)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
@@ -293,7 +311,7 @@ class IntentContainer:
         @param query: input to evaluate for an intent match
         @return: yields dict intent matches
         """
-        query = normalize_utterance(query)
+        query = _normalize(query)
 
         # Lazy cache rebuild - only rebuild once after bulk registration
         # This avoids O(n²) scaling during registration (rebuild on every add)

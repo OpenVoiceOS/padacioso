@@ -12,19 +12,18 @@ authors = [{ name = "jarbasai", email = "jarbasai@mailfence.com" }]
 requires-python = ">=3.8"
 dependencies = [
     "simplematch",
+    "ovos-spec-tools>=0.0.1a2,<1.0.0",
+    "ovos-utils>=0.3.5,<1.0.0",
 ]
 
 [project.optional-dependencies]
 extras = [
     "ovos-plugin-manager>=0.5.0,<3.0.0",
-    "ovos-utils>=0.3.5,<1.0.0",
-    "langcodes",
 ]
 test = [
     "ovos-plugin-manager>=0.5.0,<3.0.0",
     "ovos-utils>=0.3.5,<1.0.0",
     "ovos-bus-client>=0.0.8,<3.0.0",
-    "langcodes",
 ]
 
 [project.urls]
