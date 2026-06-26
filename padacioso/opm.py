@@ -9,7 +9,7 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
-from ovos_spec_tools import closest_lang, standardize_lang
+from ovos_spec_tools import closest_lang, standardize_lang, SpecMessage
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG, log_deprecation
@@ -69,15 +69,45 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             self.config.get("fuzz"), n_workers=self.workers)
             for lang in langs}
 
+        # legacy padatious registration topics (back-compat)
         self.bus.on('padatious:register_intent', self.register_intent)
         self.bus.on('padatious:register_entity', self.register_entity)
         self.bus.on('detach_intent', self.handle_detach_intent)
         self.bus.on('detach_skill', self.handle_detach_skill)
 
+        # OVOS-INTENT-4 registration topics. padacioso is a TEMPLATE engine,
+        # so it consumes the template registration topic (§6) and ignores
+        # ovos.intent.register.keyword (§11 conformance). Entity (§7) and
+        # deregister/enable/disable (§8) are consumed too.
+        self.bus.on(SpecMessage.INTENT_REGISTER_TEMPLATE.value, self.handle_register_template)
+        self.bus.on(SpecMessage.ENTITY_REGISTER.value, self.handle_register_entity)
+        self.bus.on(SpecMessage.INTENT_DEREGISTER.value, self.handle_deregister_intent)
+        self.bus.on(SpecMessage.ENTITY_DEREGISTER.value, self.handle_deregister_entity)
+        self.bus.on(SpecMessage.SKILL_DEREGISTER.value, self.handle_deregister_skill)
+        self.bus.on(SpecMessage.INTENT_ENABLE.value, self.handle_enable_intent)
+        self.bus.on(SpecMessage.INTENT_DISABLE.value, self.handle_disable_intent)
+
         self.registered_intents = []
         self.registered_entities = []
+        # OVOS-INTENT-4 §8.5 enable/disable: keep the expanded template samples
+        # keyed by (lang, internal_name) so a disabled intent can be re-armed
+        # without losing its definition.
+        self._template_samples = {}
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded Padacioso intent parser.')
+
+    @staticmethod
+    def _internal_name(skill_id: str, intent_name: str) -> str:
+        """Compose the engine-internal namespaced intent name.
+
+        padacioso stores intents under ``<skill_id>:<intent_name>`` (the
+        match result's skill_id is derived by splitting on ``:``). OVOS-INTENT-4
+        carries ``skill_id`` and ``intent_name`` as distinct fields (§3.2), so
+        recompose the legacy form here.
+        """
+        if intent_name and skill_id and not intent_name.startswith(f"{skill_id}:"):
+            return f"{skill_id}:{intent_name}"
+        return intent_name or skill_id
 
     @property
     def padacioso_config(self) -> Dict:
@@ -243,6 +273,160 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             self._register_object(message, 'entity',
                                   self.containers[lang].add_entity)
 
+    # ------------------------------------------------------------------
+    # OVOS-INTENT-4 bus handlers (consumed alongside the legacy topics)
+    # ------------------------------------------------------------------
+    def _warn_malformed(self, topic: str, data: Dict, reason: str):
+        """§5.3 / §6.3 / §7.2 — log a malformed registration at WARN.
+
+        fire-and-forget means this log is the producer's only debugging signal.
+        """
+        LOG.warning(
+            f"rejecting malformed registration on {topic}: "
+            f"skill_id={data.get('skill_id')!r} "
+            f"intent_name={data.get('intent_name') or data.get('entity_name')!r} "
+            f"lang={data.get('lang')!r} reason={reason}")
+
+    def handle_register_template(self, message: Message):
+        """OVOS-INTENT-4 §6 — register a template intent.
+
+        Maps the spec payload (``skill_id`` + ``intent_name`` + ``samples`` +
+        optional ``blacklist`` + ``lang``) onto the engine's namespaced
+        ``add_intent`` call, reusing the legacy registration internals.
+        """
+        topic = SpecMessage.INTENT_REGISTER_TEMPLATE.value
+        data = message.data
+        skill_id = data.get("skill_id")
+        intent_name = data.get("intent_name")
+        samples = data.get("samples")
+        if not samples:  # §6.3 malformed
+            self._warn_malformed(topic, data, "missing or empty 'samples'")
+            return
+        if not intent_name or not skill_id:  # §3.2 identity required
+            self._warn_malformed(topic, data, "missing 'skill_id' or 'intent_name'")
+            return
+
+        lang = standardize_lang(data.get("lang", self.lang))
+        if lang not in self.containers:
+            LOG.debug(f"ignoring template registration for unconfigured lang: {lang}")
+            return
+
+        name = self._internal_name(skill_id, intent_name)
+        # §8.1 replacement is implicit: a re-registration replaces the prior entry
+        self.__detach_intent(name)
+        self.registered_intents.append(name)
+        self._template_samples[(lang, name)] = list(samples)
+        try:
+            self.containers[lang].add_intent(name, samples)
+        except RuntimeError:
+            if name not in self.containers[lang].intent_samples:
+                raise
+
+        blacklist = data.get("blacklist")
+        if blacklist:  # §6.1 suppression phrases
+            self.containers[lang].exclude_keywords(name, list(blacklist))
+
+    def handle_register_entity(self, message: Message):
+        """OVOS-INTENT-4 §7 — register an entity value-set hint."""
+        topic = SpecMessage.ENTITY_REGISTER.value
+        data = message.data
+        skill_id = data.get("skill_id")
+        entity_name = data.get("entity_name")
+        samples = data.get("samples")
+        if not samples:  # §7.2 malformed
+            self._warn_malformed(topic, data, "missing or empty 'samples'")
+            return
+        if not entity_name or not skill_id:
+            self._warn_malformed(topic, data, "missing 'skill_id' or 'entity_name'")
+            return
+
+        lang = standardize_lang(data.get("lang", self.lang))
+        if lang not in self.containers:
+            LOG.debug(f"ignoring entity registration for unconfigured lang: {lang}")
+            return
+
+        name = self._internal_name(skill_id, entity_name)
+        # §8.1 replacement is implicit
+        self.__detach_entity(name, lang)
+        self.registered_entities = [
+            e for e in self.registered_entities
+            if not (e.get("name") == name and e.get("lang") == lang)]
+        self.registered_entities.append({"name": name, "lang": lang})
+        self.containers[lang].add_entity(name, samples)
+
+    def _intent_langs(self, message: Message) -> List[str]:
+        """Resolve which container langs a deregister/enable/disable targets.
+
+        §8.2 — when ``lang`` is omitted every registered language is affected.
+        """
+        lang = message.data.get("lang")
+        if lang:
+            lang = standardize_lang(lang)
+            return [lang] if lang in self.containers else []
+        return list(self.containers.keys())
+
+    def handle_deregister_intent(self, message: Message):
+        """OVOS-INTENT-4 §8.2 — remove one intent (all langs if lang omitted)."""
+        skill_id = message.data.get("skill_id")
+        intent_name = message.data.get("intent_name")
+        name = self._internal_name(skill_id, intent_name)
+        self.__detach_intent(name)
+        for lang in self._intent_langs(message):
+            self._template_samples.pop((lang, name), None)
+
+    def handle_deregister_entity(self, message: Message):
+        """OVOS-INTENT-4 §8.3 — remove one entity (all langs if lang omitted)."""
+        skill_id = message.data.get("skill_id")
+        entity_name = message.data.get("entity_name")
+        name = self._internal_name(skill_id, entity_name)
+        for lang in self._intent_langs(message):
+            self.__detach_entity(name, lang)
+        self.registered_entities = [
+            e for e in self.registered_entities if e.get("name") != name]
+
+    def handle_deregister_skill(self, message: Message):
+        """OVOS-INTENT-4 §8.4 — remove everything owned by a skill_id."""
+        skill_id = message.data.get("skill_id")
+        if not skill_id:
+            return
+        prefix = skill_id + ":"
+        for i in [i for i in self.registered_intents
+                  if i == skill_id or i.startswith(prefix)]:
+            self.__detach_intent(i)
+            for lang in self.containers:
+                self._template_samples.pop((lang, i), None)
+        for en in list(self.registered_entities):
+            if en["name"] == skill_id or en["name"].startswith(prefix):
+                self.__detach_entity(en["name"], en["lang"])
+        self.registered_entities = [
+            e for e in self.registered_entities
+            if not (e["name"] == skill_id or e["name"].startswith(prefix))]
+
+    def handle_disable_intent(self, message: Message):
+        """OVOS-INTENT-4 §8.5 — suppress an intent without losing its definition.
+
+        The container has no native disable, so the regexes are removed from
+        matching while the expanded samples are retained for re-arming (§8.5).
+        """
+        skill_id = message.data.get("skill_id")
+        intent_name = message.data.get("intent_name")
+        name = self._internal_name(skill_id, intent_name)
+        for lang in self._intent_langs(message):
+            if name in self.containers[lang].intent_samples:
+                self.containers[lang].remove_intent(name)
+
+    def handle_enable_intent(self, message: Message):
+        """OVOS-INTENT-4 §8.5 — re-arm a previously disabled intent."""
+        skill_id = message.data.get("skill_id")
+        intent_name = message.data.get("intent_name")
+        name = self._internal_name(skill_id, intent_name)
+        for lang in self._intent_langs(message):
+            if name in self.containers[lang].intent_samples:
+                continue  # already enabled, no-op
+            samples = self._template_samples.get((lang, name))
+            if samples:
+                self.containers[lang].add_intent(name, samples)
+
     def calc_intent(self, utterances: List[str], lang: str = None,
                     message: Optional[Message] = None) -> Optional[PadaciosoIntent]:
         """
@@ -291,6 +475,13 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.bus.remove('padatious:register_entity', self.register_entity)
         self.bus.remove('detach_intent', self.handle_detach_intent)
         self.bus.remove('detach_skill', self.handle_detach_skill)
+        self.bus.remove(SpecMessage.INTENT_REGISTER_TEMPLATE.value, self.handle_register_template)
+        self.bus.remove(SpecMessage.ENTITY_REGISTER.value, self.handle_register_entity)
+        self.bus.remove(SpecMessage.INTENT_DEREGISTER.value, self.handle_deregister_intent)
+        self.bus.remove(SpecMessage.ENTITY_DEREGISTER.value, self.handle_deregister_entity)
+        self.bus.remove(SpecMessage.SKILL_DEREGISTER.value, self.handle_deregister_skill)
+        self.bus.remove(SpecMessage.INTENT_ENABLE.value, self.handle_enable_intent)
+        self.bus.remove(SpecMessage.INTENT_DISABLE.value, self.handle_disable_intent)
 
 
 @lru_cache(maxsize=128)  # covers burst of multiple ASR hypotheses without thrashing
