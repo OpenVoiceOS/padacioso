@@ -261,9 +261,14 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             return None
 
         sess = SessionManager.get(message)
+        # Session is not hashable, so it cannot be an lru_cache key. Pass the
+        # blacklists it carries as frozensets (hashable) instead.
+        blacklisted_intents = frozenset(sess.blacklisted_intents or [])
+        blacklisted_skills = frozenset(sess.blacklisted_skills or [])
 
         intent_container = self.containers.get(lang)
-        intents = [_calc_padacioso_intent(utt, intent_container, sess)
+        intents = [_calc_padacioso_intent(utt, intent_container,
+                                          blacklisted_intents, blacklisted_skills)
                    for utt in utterances]
         intents = [i for i in intents if i is not None]
         # select best
@@ -285,7 +290,8 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
 @lru_cache(maxsize=128)  # covers burst of multiple ASR hypotheses without thrashing
 def _calc_padacioso_intent(utt: str,
                            intent_container: FallbackIntentContainer,
-                           sess: Session) -> \
+                           blacklisted_intents: frozenset = frozenset(),
+                           blacklisted_skills: frozenset = frozenset()) -> \
         Optional[PadaciosoIntent]:
     """
     Try to match an utterance to an intent in an intent_container
@@ -295,8 +301,8 @@ def _calc_padacioso_intent(utt: str,
     try:
         intents = [i for i in intent_container.calc_intents(utt)
                    if i is not None
-                   and i["name"] not in sess.blacklisted_intents
-                   and i["name"].split(":")[0] not in sess.blacklisted_skills]
+                   and i["name"] not in blacklisted_intents
+                   and i["name"].split(":")[0] not in blacklisted_skills]
         if len(intents) == 0:
             return None
         best_conf = max(x.get("conf", 0) for x in intents if x.get("name"))
