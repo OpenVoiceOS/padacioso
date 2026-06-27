@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.0.1a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.0.0a1...2.0.1a1)
+
+**Merged pull requests:**
+
+- fix: drop unhashable Session from lru\_cache key \(ovos-bus-client 2.x compat\) [\#60](https://github.com/OpenVoiceOS/padacioso/pull/60) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.0.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.0.0a1) (2026-06-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.1.1a1...2.0.0a1)
