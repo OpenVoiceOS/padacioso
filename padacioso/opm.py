@@ -457,6 +457,12 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         blacklisted_skills = frozenset(sess.blacklisted_skills or [])
 
         intent_container = self.containers.get(lang)
+        # Invalidate the burst cache once per match call: registrations,
+        # deregistrations, disables and detaches all mutate the container
+        # between calls, and a stale cache entry would keep a removed intent
+        # matching. The intra-call burst (multiple ASR hypotheses below) still
+        # benefits from the cache after this clear.
+        _calc_padacioso_intent.cache_clear()
         intents = [_calc_padacioso_intent(utt, intent_container,
                                           blacklisted_intents, blacklisted_skills)
                    for utt in utterances]
@@ -492,7 +498,9 @@ def _calc_padacioso_intent(utt: str,
         Optional[PadaciosoIntent]:
     """
     Try to match an utterance to an intent in an intent_container
-    @param args: tuple of (utterance, IntentContainer)
+
+    The session blacklists are passed as hashable frozensets so this stays
+    ``lru_cache``-able (Session is unhashable under ovos-bus-client>=2.4.0a1).
     @return: matched PadaciosoIntent
     """
     try:
