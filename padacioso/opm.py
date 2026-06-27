@@ -147,6 +147,8 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             self.registered_intents.remove(intent_name)
             for lang in self.containers:
                 self.containers[lang].remove_intent(intent_name)
+            # the container was mutated; drop stale cached matches
+            _calc_padacioso_intent.cache_clear()
 
     def handle_detach_intent(self, message):
         """Messagebus handler for detaching padacioso intent.
@@ -165,6 +167,8 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """
         if lang in self.containers:
             self.containers[lang].remove_entity(name)
+            # the container was mutated; drop stale cached matches
+            _calc_padacioso_intent.cache_clear()
 
     def handle_detach_skill(self, message):
         """Messagebus handler for detaching all intents for skill.
@@ -204,6 +208,8 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
                 samples = [line.strip() for line in f.readlines()]
 
         register_func(name, samples)
+        # the container was mutated; drop stale cached matches
+        _calc_padacioso_intent.cache_clear()
 
     def register_intent(self, message):
         """Messagebus handler for registering intents.
