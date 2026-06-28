@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.1.1a1) (2026-06-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.1.0a1...2.1.1a1)
+
+**Merged pull requests:**
+
+- fix: lift ovos-spec-tools upper bound \(spec-tools 1.x\) [\#63](https://github.com/OpenVoiceOS/padacioso/pull/63) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.1.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.1.0a1) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.0.1a1...2.1.0a1)
