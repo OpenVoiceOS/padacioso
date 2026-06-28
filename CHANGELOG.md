@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.1.0a1) (2026-06-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.0.1a1...2.1.0a1)
+
+**Merged pull requests:**
+
+- feat: consume OVOS-INTENT-4 template registration \(alongside legacy\) [\#59](https://github.com/OpenVoiceOS/padacioso/pull/59) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.0.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.0.1a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.0.0a1...2.0.1a1)
