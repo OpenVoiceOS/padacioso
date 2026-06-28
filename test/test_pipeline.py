@@ -64,3 +64,128 @@ class UtteranceIntentMatchingTest(unittest.TestCase):
         self.assertEqual(intent.matches, {'thing': 'mycroft'})
         self.assertEqual(intent.sent, utterance)
         self.assertTrue(intent.conf <= 0.8)
+
+
+class Intent4RegistrationTest(unittest.TestCase):
+    """OVOS-INTENT-4 template registration consumed alongside legacy topics."""
+
+    def get_service(self):
+        from ovos_spec_tools import SpecMessage
+        self.SpecMessage = SpecMessage
+        return PadaciosoPipeline(FakeBus(), {"fuzz": False})
+
+    def test_register_template_and_match(self):
+        svc = self.get_service()
+        # register a template intent via ovos.intent.register.template (§6)
+        msg = Message(self.SpecMessage.INTENT_REGISTER_TEMPLATE.value, {
+            "skill_id": "music.skill",
+            "intent_name": "play_music",
+            "lang": "en-US",
+            "samples": ["play {query}", "i want to listen to {query}"],
+        })
+        svc.handle_register_template(msg)
+
+        # internal name is namespaced <skill_id>:<intent_name>
+        self.assertIn("music.skill:play_music",
+                      svc.containers["en-US"].intent_samples)
+
+        # an utterance matches and the slot is captured
+        intent = svc.calc_intent("play the beatles", "en-US")
+        self.assertEqual(intent.name, "music.skill:play_music")
+        self.assertEqual(intent.matches, {"query": "the beatles"})
+
+    def test_blacklist_suppresses_match(self):
+        svc = self.get_service()
+        svc.handle_register_template(Message(
+            self.SpecMessage.INTENT_REGISTER_TEMPLATE.value, {
+                "skill_id": "music.skill", "intent_name": "play_music",
+                "lang": "en-US", "samples": ["play {query}"],
+                "blacklist": ["trailer"],
+            }))
+        # blacklisted phrase suppresses the match (§6.1)
+        intent = svc.calc_intent("play the trailer", "en-US")
+        self.assertIsNone(intent)
+        # non-blacklisted utterance still matches
+        intent = svc.calc_intent("play jazz", "en-US")
+        self.assertEqual(intent.name, "music.skill:play_music")
+
+    def test_entity_registration(self):
+        svc = self.get_service()
+        svc.handle_register_template(Message(
+            self.SpecMessage.INTENT_REGISTER_TEMPLATE.value, {
+                "skill_id": "music.skill", "intent_name": "play_on",
+                "lang": "en-US", "samples": ["play {query} on {engine}"],
+            }))
+        svc.handle_register_entity(Message(
+            self.SpecMessage.ENTITY_REGISTER.value, {
+                "skill_id": "music.skill", "entity_name": "engine",
+                "lang": "en-US", "samples": ["spotify", "youtube"],
+            }))
+        self.assertIn("music.skill:engine",
+                      svc.containers["en-US"].entity_samples)
+
+    def test_deregister_intent(self):
+        svc = self.get_service()
+        svc.handle_register_template(Message(
+            self.SpecMessage.INTENT_REGISTER_TEMPLATE.value, {
+                "skill_id": "music.skill", "intent_name": "play_music",
+                "lang": "en-US", "samples": ["play {query}"],
+            }))
+        svc.handle_deregister_intent(Message(
+            self.SpecMessage.INTENT_DEREGISTER.value, {
+                "skill_id": "music.skill", "intent_name": "play_music",
+                "lang": "en-US"}))
+        self.assertNotIn("music.skill:play_music",
+                         svc.containers["en-US"].intent_samples)
+        self.assertIsNone(svc.calc_intent("play jazz", "en-US"))
+
+    def test_deregister_skill(self):
+        svc = self.get_service()
+        for n in ("play_music", "stop_music"):
+            svc.handle_register_template(Message(
+                self.SpecMessage.INTENT_REGISTER_TEMPLATE.value, {
+                    "skill_id": "music.skill", "intent_name": n,
+                    "lang": "en-US", "samples": [f"{n} {{query}}"],
+                }))
+        svc.handle_deregister_skill(Message(
+            self.SpecMessage.SKILL_DEREGISTER.value, {"skill_id": "music.skill"}))
+        self.assertEqual(svc.containers["en-US"].intent_samples, {})
+
+    def test_disable_then_enable(self):
+        svc = self.get_service()
+        reg = lambda: svc.handle_register_template(Message(
+            self.SpecMessage.INTENT_REGISTER_TEMPLATE.value, {
+                "skill_id": "music.skill", "intent_name": "play_music",
+                "lang": "en-US", "samples": ["play {query}"],
+            }))
+        reg()
+        # disable removes it from matching but keeps the definition (§8.5).
+        # assert at the container level to avoid the engine's per-utterance
+        # lru_cache (keyed on container+session identity) masking re-arming.
+        svc.handle_disable_intent(Message(
+            self.SpecMessage.INTENT_DISABLE.value, {
+                "skill_id": "music.skill", "intent_name": "play_music",
+                "lang": "en-US"}))
+        self.assertNotIn("music.skill:play_music",
+                         svc.containers["en-US"].intent_samples)
+        # definition retained for re-arming
+        self.assertIn(("en-US", "music.skill:play_music"),
+                      svc._template_samples)
+        # enable re-arms it
+        svc.handle_enable_intent(Message(
+            self.SpecMessage.INTENT_ENABLE.value, {
+                "skill_id": "music.skill", "intent_name": "play_music",
+                "lang": "en-US"}))
+        self.assertIn("music.skill:play_music",
+                      svc.containers["en-US"].intent_samples)
+        intent = svc.calc_intent("play jazz", "en-US")
+        self.assertEqual(intent.name, "music.skill:play_music")
+
+    def test_legacy_still_works(self):
+        # back-compat: legacy padatious:register_intent path unchanged
+        svc = self.get_service()
+        svc.register_intent(Message("padatious:register_intent", {
+            "samples": ["hello there"], "lang": "en-US",
+            "name": "greet.skill:hello"}))
+        intent = svc.calc_intent("hello there", "en-US")
+        self.assertEqual(intent.name, "greet.skill:hello")
