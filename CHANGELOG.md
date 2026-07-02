@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.0a1) (2026-07-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.1.2a1...2.2.0a1)
+
+**Merged pull requests:**
+
+- feat: enforce OVOS-CONTEXT-1 requires\_context/excludes\_context gating [\#67](https://github.com/OpenVoiceOS/padacioso/pull/67) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.1.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.1.2a1) (2026-07-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.1.1a1...2.1.2a1)
