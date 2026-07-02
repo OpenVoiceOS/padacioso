@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.1.2a1) (2026-07-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.1.1a1...2.1.2a1)
+
+**Merged pull requests:**
+
+- fix: re-arm legacy-registered intents on ovos.intent.enable \(§8.5\) [\#65](https://github.com/OpenVoiceOS/padacioso/pull/65) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.1.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.1.1a1) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.1.0a1...2.1.1a1)
