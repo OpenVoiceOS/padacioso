@@ -91,8 +91,14 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.registered_entities = []
         # OVOS-INTENT-4 §8.5 enable/disable: keep the expanded template samples
         # keyed by (lang, internal_name) so a disabled intent can be re-armed
-        # without losing its definition.
+        # without losing its definition. Populated by the spec template path.
         self._template_samples = {}
+        # A disable can target an intent registered via *either* the spec
+        # template path or the legacy ``padatious:register_intent`` path (which
+        # does not fill ``_template_samples``). Stash the live samples pulled
+        # from the container at disable time, keyed by (lang, internal_name), so
+        # enable can re-arm regardless of how the intent was registered.
+        self._disabled_intents = {}
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded Padacioso intent parser.')
 
@@ -412,7 +418,11 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         intent_name = message.data.get("intent_name")
         name = self._internal_name(skill_id, intent_name)
         for lang in self._intent_langs(message):
-            if name in self.containers[lang].intent_samples:
+            samples = self.containers[lang].intent_samples.get(name)
+            if samples is not None:
+                # retain the live samples so a legacy-registered intent (which
+                # never populated ``_template_samples``) can still be re-armed
+                self._disabled_intents[(lang, name)] = list(samples)
                 self.containers[lang].remove_intent(name)
 
     def handle_enable_intent(self, message: Message):
@@ -422,8 +432,13 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         name = self._internal_name(skill_id, intent_name)
         for lang in self._intent_langs(message):
             if name in self.containers[lang].intent_samples:
+                self._disabled_intents.pop((lang, name), None)
                 continue  # already enabled, no-op
-            samples = self._template_samples.get((lang, name))
+            # prefer the samples stashed at disable time (works for both the
+            # spec and legacy registration paths); fall back to the retained
+            # template definition for a spec-registered intent.
+            samples = (self._disabled_intents.pop((lang, name), None)
+                       or self._template_samples.get((lang, name)))
             if samples:
                 self.containers[lang].add_intent(name, samples)
 
