@@ -9,7 +9,7 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
-from ovos_spec_tools import closest_lang, standardize_lang, SpecMessage
+from ovos_spec_tools import closest_lang, standardize_lang, SpecMessage, gate_satisfied
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG, log_deprecation
@@ -99,8 +99,27 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # from the container at disable time, keyed by (lang, internal_name), so
         # enable can re-arm regardless of how the intent was registered.
         self._disabled_intents = {}
+        # OVOS-CONTEXT-1 §6/§6.1 — optional requires_context/excludes_context
+        # gating declarations, keyed by internal intent name. Independent of
+        # lang and of the enable/disable/detach match state: retained until the
+        # intent is deregistered/detached so a re-armed intent keeps its gate.
+        self._intent_context_gates = {}
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded Padacioso intent parser.')
+
+    def _store_context_gate(self, name: str, data: Dict):
+        """OVOS-CONTEXT-1 §6 — retain optional context gates for an intent.
+
+        ``requires_context`` / ``excludes_context`` are each an optional list
+        of bare-string keys or ``{"key","scope"}`` mappings (default private).
+        Absent/empty declarations clear any prior gate for the name.
+        """
+        requires = data.get("requires_context")
+        excludes = data.get("excludes_context")
+        if requires or excludes:
+            self._intent_context_gates[name] = (requires, excludes)
+        else:
+            self._intent_context_gates.pop(name, None)
 
     @staticmethod
     def _internal_name(skill_id: str, intent_name: str) -> str:
@@ -181,6 +200,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """
         if intent_name in self.registered_intents:
             self.registered_intents.remove(intent_name)
+            self._intent_context_gates.pop(intent_name, None)
             for lang in self.containers:
                 self.containers[lang].remove_intent(intent_name)
             # the container was mutated; drop stale cached matches
@@ -257,6 +277,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         lang = standardize_lang(lang)
         if lang in self.containers:
             self.registered_intents.append(message.data['name'])
+            self._store_context_gate(message.data['name'], message.data)
             try:
                 self._register_object(message, 'intent',
                                       self.containers[lang].add_intent)
@@ -322,6 +343,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.__detach_intent(name)
         self.registered_intents.append(name)
         self._template_samples[(lang, name)] = list(samples)
+        self._store_context_gate(name, data)
         try:
             self.containers[lang].add_intent(name, samples)
         except RuntimeError:
@@ -482,6 +504,24 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
                                           blacklisted_intents, blacklisted_skills)
                    for utt in utterances]
         intents = [i for i in intents if i is not None]
+        # OVOS-CONTEXT-1 §6/§6.1 — drop candidates whose requires_context /
+        # excludes_context gate is not satisfied by the live session context.
+        # gate_satisfied handles §2 liveness, §3.1 scope and §4 decay.
+        if self._intent_context_gates:
+            ctx = sess.intent_context or {}
+            gated = []
+            for i in intents:
+                gate = self._intent_context_gates.get(i.name)
+                if gate is None:
+                    gated.append(i)
+                    continue
+                requires, excludes = gate
+                owner_id = i.name.split(":")[0]
+                if gate_satisfied(ctx, requires, excludes, owner_id=owner_id):
+                    gated.append(i)
+                else:
+                    LOG.debug(f"context gate rejected intent: {i.name}")
+            intents = gated
         # select best
         if intents:
             return max(intents, key=lambda k: k.conf)
