@@ -181,6 +181,33 @@ class Intent4RegistrationTest(unittest.TestCase):
         intent = svc.calc_intent("play jazz", "en-US")
         self.assertEqual(intent.name, "music.skill:play_music")
 
+    def test_disable_then_enable_legacy_registered(self):
+        # §8.5 must re-arm an intent registered via the *legacy*
+        # ``padatious:register_intent`` path too — that path never populates
+        # ``_template_samples``, so enable relies on the samples stashed at
+        # disable time. Regression for a disabled legacy intent that could
+        # never be re-enabled (stayed unmatched forever).
+        svc = self.get_service()
+        svc.register_intent(Message("padatious:register_intent", {
+            "samples": ["play {query}"], "lang": "en-US",
+            "name": "music.skill:play_music"}))
+        self.assertEqual(svc.calc_intent("play jazz", "en-US").name,
+                         "music.skill:play_music")
+        svc.handle_disable_intent(Message(
+            self.SpecMessage.INTENT_DISABLE.value, {
+                "skill_id": "music.skill", "intent_name": "play_music",
+                "lang": "en-US"}))
+        self.assertNotIn("music.skill:play_music",
+                         svc.containers["en-US"].intent_samples)
+        svc.handle_enable_intent(Message(
+            self.SpecMessage.INTENT_ENABLE.value, {
+                "skill_id": "music.skill", "intent_name": "play_music",
+                "lang": "en-US"}))
+        self.assertIn("music.skill:play_music",
+                      svc.containers["en-US"].intent_samples)
+        self.assertEqual(svc.calc_intent("play jazz", "en-US").name,
+                         "music.skill:play_music")
+
     def test_legacy_still_works(self):
         # back-compat: legacy padatious:register_intent path unchanged
         svc = self.get_service()
