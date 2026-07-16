@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.1a1) (2026-07-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.0a1...2.2.1a1)
+
+**Merged pull requests:**
+
+- fix: skip malformed template samples instead of crashing registration [\#70](https://github.com/OpenVoiceOS/padacioso/pull/70) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.2.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.0a1) (2026-07-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.1.2a1...2.2.0a1)
