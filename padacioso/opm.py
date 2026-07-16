@@ -88,6 +88,12 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.bus.on(SpecMessage.INTENT_ENABLE.value, self.handle_enable_intent)
         self.bus.on(SpecMessage.INTENT_DISABLE.value, self.handle_disable_intent)
 
+        # Registrations compile their regex synchronously as they arrive, so
+        # there is never a pending training step: ack train requests
+        # immediately so ovos-core does not wait for a reply that only
+        # engines with a real training step would otherwise send.
+        self.bus.on("mycroft.skills.train", self.handle_train)
+
         self.registered_intents = []
         self.registered_entities = []
         # OVOS-INTENT-4 §8.5 enable/disable: keep the expanded template samples
@@ -574,7 +580,21 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             return closest_lang(lang, list(self.containers.keys()))
         return None
 
+    def handle_train(self, message: Optional[Message] = None):
+        """Ack ``mycroft.skills.train`` with ``mycroft.skills.trained``.
+
+        Intent templates are compiled at registration time, so by the time a
+        train request is observed there is nothing left to train and the ack
+        can be sent right away. Without this reply ovos-core would wait out
+        its full training timeout whenever no engine with a real training
+        step is installed.
+        """
+        reply = (message.forward("mycroft.skills.trained")
+                 if message else Message("mycroft.skills.trained"))
+        self.bus.emit(reply)
+
     def shutdown(self):
+        self.bus.remove("mycroft.skills.train", self.handle_train)
         self.bus.remove('padatious:register_intent', self.register_intent)
         self.bus.remove('padatious:register_entity', self.register_entity)
         self.bus.remove('detach_intent', self.handle_detach_intent)
