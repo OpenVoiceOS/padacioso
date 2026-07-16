@@ -9,7 +9,8 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
-from ovos_spec_tools import closest_lang, standardize_lang, SpecMessage, gate_satisfied
+from ovos_spec_tools import closest_lang, standardize_lang, SpecMessage, gate_satisfied, \
+    expand, MalformedTemplate
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG, log_deprecation
@@ -241,13 +242,37 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             if en["name"].startswith(skill_id_colon):
                 self.__detach_entity(en["name"], en["lang"])
 
-    def _register_object(self, message, object_name, register_func):
+    def _valid_samples(self, samples, topic, name, lang):
+        """Drop malformed template samples, keeping the valid ones.
+
+        OVOS-INTENT-4 §6.3/§5.3 — each sample that fails template expansion
+        is skipped with a WARN naming the owning skill, the intent/entity,
+        the lang, the topic and the reason; the remaining samples are still
+        indexed. An empty return means the registration must be rejected.
+        """
+        skill_id = name.split(':')[0] if ':' in name else None
+        valid = []
+        for sample in samples:
+            try:
+                expand(sample)
+                valid.append(sample)
+            except MalformedTemplate as e:
+                LOG.warning(f"skipping malformed sample on {topic}: "
+                            f"skill_id={skill_id!r} name={name!r} "
+                            f"lang={lang!r} reason={e}")
+        return valid
+
+    def _register_object(self, message, object_name, register_func, lang):
         """Generic method for registering a padacioso object.
 
         Args:
             message (Message): trigger for action
             object_name (str): type of entry to register
             register_func (callable): function to call for registration
+            lang (str): standardized language of the registration
+
+        Returns:
+            bool: True if something was registered
         """
         file_name = message.data.get('file_name')
         samples = message.data.get("samples")
@@ -257,15 +282,23 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
 
         if (not file_name or not isfile(file_name)) and not samples:
             LOG.error('Could not find file ' + file_name)
-            return
+            return False
 
         if not samples and isfile(file_name):
             with open(file_name) as f:
                 samples = [line.strip() for line in f.readlines()]
 
+        samples = self._valid_samples(samples, message.msg_type, name, lang)
+        if not samples:  # §6.3 — reject only when nothing valid remains
+            LOG.warning(f"rejecting {object_name} registration on "
+                        f"{message.msg_type}: name={name!r} lang={lang!r} "
+                        f"reason=no valid samples remain")
+            return False
+
         register_func(name, samples)
         # the container was mutated; drop stale cached matches
         _calc_padacioso_intent.cache_clear()
+        return True
 
     def register_intent(self, message):
         """Messagebus handler for registering intents.
@@ -276,16 +309,18 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         lang = message.data.get('lang', self.lang)
         lang = standardize_lang(lang)
         if lang in self.containers:
-            self.registered_intents.append(message.data['name'])
-            self._store_context_gate(message.data['name'], message.data)
             try:
-                self._register_object(message, 'intent',
-                                      self.containers[lang].add_intent)
+                registered = self._register_object(
+                    message, 'intent', self.containers[lang].add_intent, lang)
             except RuntimeError:
                 name = message.data.get('name', "")
                 # padacioso fails on reloading a skill, just ignore
                 if name not in self.containers[lang].intent_samples:
                     raise
+                registered = True
+            if registered:
+                self.registered_intents.append(message.data['name'])
+                self._store_context_gate(message.data['name'], message.data)
 
     def register_entity(self, message):
         """Messagebus handler for registering entities.
@@ -296,9 +331,9 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         lang = message.data.get('lang', self.lang)
         lang = standardize_lang(lang)
         if lang in self.containers:
-            self.registered_entities.append(message.data)
-            self._register_object(message, 'entity',
-                                  self.containers[lang].add_entity)
+            if self._register_object(message, 'entity',
+                                     self.containers[lang].add_entity, lang):
+                self.registered_entities.append(message.data)
 
     # ------------------------------------------------------------------
     # OVOS-INTENT-4 bus handlers (consumed alongside the legacy topics)
@@ -339,6 +374,10 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             return
 
         name = self._internal_name(skill_id, intent_name)
+        samples = self._valid_samples(samples, topic, name, lang)
+        if not samples:  # §6.3 — reject only when nothing valid remains
+            self._warn_malformed(topic, data, "no valid samples remain")
+            return
         # §8.1 replacement is implicit: a re-registration replaces the prior entry
         self.__detach_intent(name)
         self.registered_intents.append(name)
@@ -374,6 +413,10 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             return
 
         name = self._internal_name(skill_id, entity_name)
+        samples = self._valid_samples(samples, topic, name, lang)
+        if not samples:  # §7.2 — reject only when nothing valid remains
+            self._warn_malformed(topic, data, "no valid samples remain")
+            return
         # §8.1 replacement is implicit
         self.__detach_entity(name, lang)
         self.registered_entities = [
