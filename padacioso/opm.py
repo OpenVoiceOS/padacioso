@@ -199,6 +199,10 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         Args:
             intent_name (str): intent identifier
         """
+        # Detach/removal must key off the same canonical name registration
+        # collapsed onto, so unregistering by either the legacy `.intent`
+        # alias or the OVOS-INTENT-4 canonical id works (ovos-core#831).
+        intent_name = _dealias_intent_name(intent_name)
         if intent_name in self.registered_intents:
             self.registered_intents.remove(intent_name)
             self._intent_context_gates.pop(intent_name, None)
@@ -306,6 +310,15 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         Args:
             message (Message): message triggering action
         """
+        # ovos-workshop >= 9.3 dual-registers one logical intent under both
+        # the legacy ``padatious:register_intent`` contract (name suffixed
+        # ``.intent``) and the OVOS-INTENT-4 spec contract (suffix-less,
+        # routed via handle_register_template). Collapse the alias to the
+        # canonical name HERE, at registration time, so both wire messages
+        # index a single engine entry instead of two matchable duplicates
+        # (ovos-core#831). This plugin owns its own back-compat.
+        message.data['name'] = _dealias_intent_name(message.data['name'])
+
         lang = message.data.get('lang', self.lang)
         lang = standardize_lang(lang)
         if lang in self.containers:
@@ -319,7 +332,11 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
                     raise
                 registered = True
             if registered:
-                self.registered_intents.append(message.data['name'])
+                # §8.1 replacement is implicit: a re-registration of the same
+                # canonical name replaces the prior manifest entry rather
+                # than stacking a duplicate (mirrors handle_register_template).
+                if message.data['name'] not in self.registered_intents:
+                    self.registered_intents.append(message.data['name'])
                 self._store_context_gate(message.data['name'], message.data)
 
     def register_entity(self, message):
@@ -588,6 +605,56 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.bus.remove(SpecMessage.INTENT_DISABLE.value, self.handle_disable_intent)
 
 
+def _dealias_intent_name(name: Optional[str]) -> Optional[str]:
+    """Fold the legacy ``<skill_id>:<file>.intent`` id onto the OVOS-INTENT-4
+    canonical ``<skill_id>:<file>`` id.
+
+    ovos-workshop >= 9.3 dual-registers one skill capability under both wire
+    forms during the INTENT-4 migration (the legacy ``padatious:register_intent``
+    contract and the spec ``ovos.intent.register.template`` contract, whose
+    ``intent_name`` already has the ``.intent`` suffix stripped). This plugin
+    folds that onto one canonical engine entry at REGISTRATION time (see
+    ``PadaciosoPipeline.register_intent``/``handle_register_template``), so
+    engine matches (``i["name"]``) are canonical by construction.
+
+    This helper is also used to canonicalize session ``blacklisted_intents``
+    entries, since old sessions/configs may still carry the legacy
+    ``.intent``-suffixed id (ovos-core#831; OVOS-PIPELINE-1 §5.4).
+    """
+    if name and name.endswith(".intent"):
+        return name[:-len(".intent")]
+    return name
+
+
+# Legacy `.intent`-suffixed blacklist entries are deprecated compat, not a
+# stable contract. Warn once per distinct offending entry (not per utterance)
+# so stale mycroft.conf/session config gets flagged without spamming the log.
+_warned_legacy_blacklist_entries = set()
+
+
+def _canonicalize_blacklist(blacklisted_intents: frozenset) -> frozenset:
+    """Canonicalize legacy `.intent`-suffixed session blacklist entries.
+
+    Sessions/config may still list intents by the legacy
+    ``<skill_id>:<file>.intent`` id. Engine matches are canonical by
+    construction (registration-time alias collapse), so the blacklist must be
+    normalized to compare correctly. Logs a one-time deprecation warning per
+    distinct legacy entry pointing at the canonical replacement.
+    """
+    canonical = set()
+    for b in blacklisted_intents:
+        c = _dealias_intent_name(b)
+        canonical.add(c)
+        if c != b and b not in _warned_legacy_blacklist_entries:
+            _warned_legacy_blacklist_entries.add(b)
+            LOG.warning(
+                f"Session blacklisted_intents entry '{b}' uses the deprecated "
+                f"legacy '.intent'-suffixed id; support for this alias will "
+                f"be removed. Update mycroft.conf / session config to use the "
+                f"canonical id '{c}' instead.")
+    return frozenset(canonical)
+
+
 @lru_cache(maxsize=128)  # covers burst of multiple ASR hypotheses without thrashing
 def _calc_padacioso_intent(utt: str,
                            intent_container: FallbackIntentContainer,
@@ -602,6 +669,10 @@ def _calc_padacioso_intent(utt: str,
     @return: matched PadaciosoIntent
     """
     try:
+        blacklisted_intents = _canonicalize_blacklist(blacklisted_intents)
+        # Matches are canonical by construction (registration-time alias
+        # collapse, see PadaciosoPipeline.register_intent), so only the
+        # blacklist needs canonicalizing here.
         intents = [i for i in intent_container.calc_intents(utt)
                    if i is not None
                    and i["name"] not in blacklisted_intents

@@ -38,7 +38,9 @@ class LegacyRegistrationMalformedSamplesTest(unittest.TestCase):
                                       'stop everything'])
         self.assertEqual(warn.call_count, 2)
         container = pipeline.containers['en-US']
-        name = 'skill-persona.openvoiceos:cancel.intent'
+        # registration-time alias collapse (ovos-core#831) canonicalizes the
+        # legacy `.intent`-suffixed name before indexing
+        name = 'skill-persona.openvoiceos:cancel'
         self.assertIn(name, container.intent_samples)
         result = container.calc_intent('stop everything')
         self.assertEqual(result['name'], name)
@@ -58,7 +60,9 @@ class LegacyRegistrationMalformedSamplesTest(unittest.TestCase):
         with mock.patch('padacioso.opm.LOG.warning') as warn:
             self._register(pipeline, ['{utterance}', 'stop everything'])
         logged = " ".join(str(c) for c in warn.call_args_list)
-        for token in ('skill-persona.openvoiceos', 'cancel.intent',
+        # the warning names the canonical (alias-collapsed) intent name,
+        # since registration-time collapse happens before this log fires
+        for token in ('skill-persona.openvoiceos', 'cancel',
                       'en-US', 'padatious:register_intent'):
             self.assertIn(token, logged)
 
