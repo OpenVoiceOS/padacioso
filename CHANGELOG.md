@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.2a1) (2026-07-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.1a1...2.2.2a1)
+
+**Merged pull requests:**
+
+- fix: session blacklist bypassed by the legacy/INTENT-4 intent-name alias [\#73](https://github.com/OpenVoiceOS/padacioso/pull/73) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.2.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.1a1) (2026-07-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.0a1...2.2.1a1)
