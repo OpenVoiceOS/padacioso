@@ -18,8 +18,7 @@ hit).
 import re
 from typing import Dict, List, Optional, Set
 
-from padacioso import IntentContainer
-from padacioso.bracket_expansion import normalize_example
+from padacioso import IntentContainer, _normalize as normalize_example
 
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
