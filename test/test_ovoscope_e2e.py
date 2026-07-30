@@ -122,5 +122,56 @@ class TestSessionBlacklist(_PadaciosoHarness):
         self.expect_no_match("hello", session=sess, timeout=3.0)
 
 
+class TestSessionBlacklistAlias(_PadaciosoHarness):
+    """ovos-workshop >= 9.3 dual-registers each ``.intent`` file under both
+    the legacy ``<skill_id>:<file>.intent`` id and the OVOS-INTENT-4
+    canonical ``<skill_id>:<file>`` id (ovos-core#831). The plugin collapses
+    that alias onto one canonical engine entry at REGISTRATION time (see
+    ``PadaciosoPipeline.register_intent``/``handle_register_template``), so
+    a session blacklist entry naming either alias must suppress the single
+    canonical match, per OVOS-PIPELINE-1 §5.4. Here both messages go through
+    the legacy topic with different names to exercise the blacklist
+    canonicalization path directly; ``test/test_registration_collapse.py``
+    covers the registration-time collapse across both wire topics.
+    """
+
+    LEGACY_NAME = f"{_PadaciosoHarness.SKILL_ID}:hello.intent"
+    NEW_NAME = f"{_PadaciosoHarness.SKILL_ID}:hello"
+
+    def _register_both_aliases(self):
+        self._register_intent(self.LEGACY_NAME, _HELLO_SAMPLES)
+        self._register_intent(self.NEW_NAME, _HELLO_SAMPLES)
+
+    def test_blacklisting_legacy_id_suppresses_new_alias(self):
+        self._register_both_aliases()
+        sess = make_session(
+            "bl-alias-legacy-test",
+            blacklisted_intents=[self.LEGACY_NAME],
+        )
+        self.expect_no_match("hello", session=sess, timeout=3.0)
+
+    def test_blacklisting_new_id_suppresses_legacy_alias(self):
+        self._register_both_aliases()
+        sess = make_session(
+            "bl-alias-new-test",
+            blacklisted_intents=[self.NEW_NAME],
+        )
+        self.expect_no_match("hello", session=sess, timeout=3.0)
+
+    def test_non_blacklisted_intent_still_matches(self):
+        self._register_both_aliases()
+        self._register_intent(f"{self.SKILL_ID}:bye", _BYE_SAMPLES)
+        sess = make_session(
+            "bl-alias-unrelated-test",
+            blacklisted_intents=[f"{self.SKILL_ID}:bye"],
+        )
+        msg = self.send_and_capture(
+            "hello",
+            expected_types=[self.LEGACY_NAME, self.NEW_NAME],
+            session=sess,
+        )
+        self.assertIsNotNone(msg)
+
+
 if __name__ == "__main__":
     unittest.main()

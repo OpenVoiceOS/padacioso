@@ -1,5 +1,77 @@
 # Changelog
 
+## [2.2.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.2a1) (2026-07-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.1a1...2.2.2a1)
+
+**Merged pull requests:**
+
+- fix: session blacklist bypassed by the legacy/INTENT-4 intent-name alias [\#73](https://github.com/OpenVoiceOS/padacioso/pull/73) ([JarbasAl](https://github.com/JarbasAl))
+
+## [2.2.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.1a1) (2026-07-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.0a1...2.2.1a1)
+
+**Merged pull requests:**
+
+- fix: skip malformed template samples instead of crashing registration [\#70](https://github.com/OpenVoiceOS/padacioso/pull/70) ([JarbasAl](https://github.com/JarbasAl))
+
+## [2.2.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.0a1) (2026-07-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.1.2a1...2.2.0a1)
+
+**Merged pull requests:**
+
+- feat: enforce OVOS-CONTEXT-1 requires\_context/excludes\_context gating [\#67](https://github.com/OpenVoiceOS/padacioso/pull/67) ([JarbasAl](https://github.com/JarbasAl))
+
+## [2.1.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.1.2a1) (2026-07-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.1.1a1...2.1.2a1)
+
+**Merged pull requests:**
+
+- fix: re-arm legacy-registered intents on ovos.intent.enable \(§8.5\) [\#65](https://github.com/OpenVoiceOS/padacioso/pull/65) ([JarbasAl](https://github.com/JarbasAl))
+
+## [2.1.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.1.1a1) (2026-06-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.1.0a1...2.1.1a1)
+
+**Merged pull requests:**
+
+- fix: lift ovos-spec-tools upper bound \(spec-tools 1.x\) [\#63](https://github.com/OpenVoiceOS/padacioso/pull/63) ([JarbasAl](https://github.com/JarbasAl))
+
+## [2.1.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.1.0a1) (2026-06-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.0.1a1...2.1.0a1)
+
+**Merged pull requests:**
+
+- feat: consume OVOS-INTENT-4 template registration \(alongside legacy\) [\#59](https://github.com/OpenVoiceOS/padacioso/pull/59) ([JarbasAl](https://github.com/JarbasAl))
+
+## [2.0.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.0.1a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.0.0a1...2.0.1a1)
+
+**Merged pull requests:**
+
+- fix: drop unhashable Session from lru\_cache key \(ovos-bus-client 2.x compat\) [\#60](https://github.com/OpenVoiceOS/padacioso/pull/60) ([JarbasAl](https://github.com/JarbasAl))
+
+## [2.0.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.0.0a1) (2026-06-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.1.1a1...2.0.0a1)
+
+**Breaking changes:**
+
+- feat!: enforce OVOS-INTENT-1 grammar and normalization via ovos-spec-tools [\#55](https://github.com/OpenVoiceOS/padacioso/pull/55) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.1.1a1](https://github.com/OpenVoiceOS/padacioso/tree/1.1.1a1) (2026-06-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.1.0a1...1.1.1a1)
+
+**Merged pull requests:**
+
+- fix\(deps\): allow ovos-bus-client 2.x \(widen cap to \<3.0.0\) [\#56](https://github.com/OpenVoiceOS/padacioso/pull/56) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.1.0a1](https://github.com/OpenVoiceOS/padacioso/tree/1.1.0a1) (2026-05-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.2a3...1.1.0a1)

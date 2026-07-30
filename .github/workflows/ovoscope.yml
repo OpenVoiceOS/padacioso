@@ -6,6 +6,7 @@ on:
     paths:
       - 'padacioso/**'
       - 'test/test_ovoscope_e2e.py'
+      - 'test/end2end/**'
       - '.github/workflows/ovoscope.yml'
   workflow_dispatch:
 
@@ -14,7 +15,7 @@ jobs:
     uses: OpenVoiceOS/gh-automations/.github/workflows/ovoscope.yml@dev
     with:
       install_extras: "test"
-      test_path: "test/test_ovoscope_e2e.py"
+      test_path: "test/test_ovoscope_e2e.py test/end2end/"
       # padacioso is always available via ovos-workshop, but install it
       # explicitly here so the engine under test is the local checkout
       # (not whatever ovos-workshop ships).
