@@ -156,6 +156,14 @@ Padacioso ships as an OVOS pipeline plugin (`ovos-padacioso-pipeline-plugin`) an
 }
 ```
 
+## Hierarchical (domain) pipeline
+
+A second OPM entry point — `ovos-padacioso-domain-pipeline` — exposes a two-level
+variant backed by `DomainIntentContainer`. Intents are grouped by `skill_id` (taken from
+the `skill_id:intent` label prefix); the top-level classifier first picks the most likely
+domain, then the per-domain sub-container resolves the intent. See
+[docs/domain_pipeline.md](docs/domain_pipeline.md) for configuration and routing details.
+
 ## License
 
 Apache 2.0

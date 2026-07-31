@@ -16,6 +16,7 @@ from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG, log_deprecation
 
 from padacioso import IntentContainer as FallbackIntentContainer
+from padacioso.domain_engine import DomainIntentContainer
 
 
 class PadaciosoIntent:
@@ -66,9 +67,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.conf_low = self.config.get("conf_low") or 0.5
         self.workers = self.config.get("workers") or 4
 
-        self.containers = {lang: FallbackIntentContainer(
-            self.config.get("fuzz"), n_workers=self.workers)
-            for lang in langs}
+        self.containers = {lang: self._build_container() for lang in langs}
 
         # legacy padatious registration topics (back-compat)
         self.bus.on('padatious:register_intent', self.register_intent)
@@ -193,6 +192,50 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """
         return self._match_level(utterances, self.conf_low, lang, message)
 
+    # ------------------------------------------------------------------
+    # Container-shape hooks - overridden by DomainPadaciosoPipeline
+    # ------------------------------------------------------------------
+
+    def _build_container(self):
+        """Build a per-language intent container.
+
+        Subclasses can override to swap the container type (e.g. for the
+        hierarchical :class:`DomainIntentContainer`).
+        """
+        return FallbackIntentContainer(self.config.get("fuzz"),
+                                       n_workers=self.workers)
+
+    def _container_add_intent(self, container, name: str, samples: List[str]) -> None:
+        """Add an intent to a single-language container."""
+        container.add_intent(name, samples)
+
+    def _container_add_entity(self, container, name: str, samples: List[str]) -> None:
+        """Add an entity to a single-language container."""
+        container.add_entity(name, samples)
+
+    def _container_remove_intent(self, container, name: str) -> None:
+        """Remove an intent from a single-language container."""
+        container.remove_intent(name)
+
+    def _container_remove_entity(self, container, name: str) -> None:
+        """Remove an entity from a single-language container."""
+        container.remove_entity(name)
+
+    def _container_has_intent(self, container, name: str) -> bool:
+        """Return whether the container already knows ``name`` (reload path)."""
+        return name in getattr(container, "intent_samples", {})
+
+    def _container_exclude_keywords(self, container, name: str,
+                                    keywords: List[str]) -> None:
+        """Register suppression keywords for ``name`` on the container."""
+        container.exclude_keywords(name, keywords)
+
+    def _container_get_intent_samples(self, container, name: str) -> Optional[List[str]]:
+        """Return the live registered samples for ``name``, or ``None``."""
+        return getattr(container, "intent_samples", {}).get(name)
+
+    # ------------------------------------------------------------------
+
     def __detach_intent(self, intent_name):
         """ Remove an intent if it has been registered.
 
@@ -207,7 +250,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             self.registered_intents.remove(intent_name)
             self._intent_context_gates.pop(intent_name, None)
             for lang in self.containers:
-                self.containers[lang].remove_intent(intent_name)
+                self._container_remove_intent(self.containers[lang], intent_name)
             # the container was mutated; drop stale cached matches
             _calc_padacioso_intent.cache_clear()
 
@@ -227,7 +270,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             entity lang
         """
         if lang in self.containers:
-            self.containers[lang].remove_entity(name)
+            self._container_remove_entity(self.containers[lang], name)
             # the container was mutated; drop stale cached matches
             _calc_padacioso_intent.cache_clear()
 
@@ -324,11 +367,13 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         if lang in self.containers:
             try:
                 registered = self._register_object(
-                    message, 'intent', self.containers[lang].add_intent, lang)
+                    message, 'intent',
+                    lambda n, s: self._container_add_intent(self.containers[lang], n, s),
+                    lang)
             except RuntimeError:
                 name = message.data.get('name', "")
                 # padacioso fails on reloading a skill, just ignore
-                if name not in self.containers[lang].intent_samples:
+                if not self._container_has_intent(self.containers[lang], name):
                     raise
                 registered = True
             if registered:
@@ -348,8 +393,11 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         lang = message.data.get('lang', self.lang)
         lang = standardize_lang(lang)
         if lang in self.containers:
-            if self._register_object(message, 'entity',
-                                     self.containers[lang].add_entity, lang):
+            if self._register_object(
+                message, 'entity',
+                lambda n, s: self._container_add_entity(self.containers[lang], n, s),
+                lang,
+            ):
                 self.registered_entities.append(message.data)
 
     # ------------------------------------------------------------------
@@ -401,14 +449,14 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self._template_samples[(lang, name)] = list(samples)
         self._store_context_gate(name, data)
         try:
-            self.containers[lang].add_intent(name, samples)
+            self._container_add_intent(self.containers[lang], name, samples)
         except RuntimeError:
-            if name not in self.containers[lang].intent_samples:
+            if not self._container_has_intent(self.containers[lang], name):
                 raise
 
         blacklist = data.get("blacklist")
         if blacklist:  # §6.1 suppression phrases
-            self.containers[lang].exclude_keywords(name, list(blacklist))
+            self._container_exclude_keywords(self.containers[lang], name, list(blacklist))
 
     def handle_register_entity(self, message: Message):
         """OVOS-INTENT-4 §7 — register an entity value-set hint."""
@@ -440,7 +488,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             e for e in self.registered_entities
             if not (e.get("name") == name and e.get("lang") == lang)]
         self.registered_entities.append({"name": name, "lang": lang})
-        self.containers[lang].add_entity(name, samples)
+        self._container_add_entity(self.containers[lang], name, samples)
 
     def _intent_langs(self, message: Message) -> List[str]:
         """Resolve which container langs a deregister/enable/disable targets.
@@ -500,12 +548,12 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         intent_name = message.data.get("intent_name")
         name = self._internal_name(skill_id, intent_name)
         for lang in self._intent_langs(message):
-            samples = self.containers[lang].intent_samples.get(name)
+            samples = self._container_get_intent_samples(self.containers[lang], name)
             if samples is not None:
                 # retain the live samples so a legacy-registered intent (which
                 # never populated ``_template_samples``) can still be re-armed
                 self._disabled_intents[(lang, name)] = list(samples)
-                self.containers[lang].remove_intent(name)
+                self._container_remove_intent(self.containers[lang], name)
 
     def handle_enable_intent(self, message: Message):
         """OVOS-INTENT-4 §8.5 — re-arm a previously disabled intent."""
@@ -513,7 +561,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         intent_name = message.data.get("intent_name")
         name = self._internal_name(skill_id, intent_name)
         for lang in self._intent_langs(message):
-            if name in self.containers[lang].intent_samples:
+            if self._container_has_intent(self.containers[lang], name):
                 self._disabled_intents.pop((lang, name), None)
                 continue  # already enabled, no-op
             # prefer the samples stashed at disable time (works for both the
@@ -522,7 +570,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             samples = (self._disabled_intents.pop((lang, name), None)
                        or self._template_samples.get((lang, name)))
             if samples:
-                self.containers[lang].add_intent(name, samples)
+                self._container_add_intent(self.containers[lang], name, samples)
 
     def calc_intent(self, utterances: List[str], lang: str = None,
                     message: Optional[Message] = None) -> Optional[PadaciosoIntent]:
@@ -560,8 +608,8 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # matching. The intra-call burst (multiple ASR hypotheses below) still
         # benefits from the cache after this clear.
         _calc_padacioso_intent.cache_clear()
-        intents = [_calc_padacioso_intent(utt, intent_container,
-                                          blacklisted_intents, blacklisted_skills)
+        intents = [self._calc_one(utt, intent_container,
+                                  blacklisted_intents, blacklisted_skills)
                    for utt in utterances]
         intents = [i for i in intents if i is not None]
         # OVOS-CONTEXT-1 §6/§6.1 — drop candidates whose requires_context /
@@ -585,6 +633,17 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # select best
         if intents:
             return max(intents, key=lambda k: k.conf)
+
+    def _calc_one(self, utt: str, intent_container,
+                  blacklisted_intents: frozenset,
+                  blacklisted_skills: frozenset) -> Optional[PadaciosoIntent]:
+        """Single-utterance matcher hook.
+
+        The flat pipeline scans a single :class:`IntentContainer`.
+        Subclasses can override to add domain routing.
+        """
+        return _calc_padacioso_intent(utt, intent_container,
+                                      blacklisted_intents, blacklisted_skills)
 
     def _get_closest_lang(self, lang: str) -> Optional[str]:
         if self.containers:
@@ -694,3 +753,128 @@ def _calc_padacioso_intent(utt: str,
         return intent
     except Exception as e:
         LOG.error(e)
+
+
+class DomainPadaciosoPipeline(PadaciosoPipeline):
+    """Hierarchical, two-level padacioso pipeline.
+
+    Same behaviour as :class:`PadaciosoPipeline` except the underlying
+    per-language container is a :class:`DomainIntentContainer`. Each
+    registered intent is routed to a domain == ``skill_id`` (taken from
+    the intent label's ``<skill_id>:<intent>`` prefix); inference first
+    picks the most likely domain via the top-level classifier and then
+    resolves the intent inside that domain.
+
+    Configuration is read from ``intents.ovos_padacioso_domain_pipeline``
+    so this pipeline can coexist with the flat plugin in the same OVOS
+    instance. Accepts every key the flat plugin does.
+
+    Example ``mycroft.conf``::
+
+        "intents": {
+            "ovos-padacioso-domain-pipeline": {
+                "fuzz": true
+            }
+        }
+    """
+
+    def __init__(self, bus: Optional[Union[MessageBusClient, FakeBus]] = None,
+                 config: Optional[Dict] = None):
+        if config is None:
+            config = (
+                Configuration().get("intents", {})
+                .get("ovos_padacioso_domain_pipeline") or {}
+            )
+        super().__init__(bus=bus, config=config)
+
+    # ------------------------------------------------------------------
+    # Overrides - swap the container and route adds/removes through domains
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _domain_of(name: str) -> str:
+        """Extract the domain (skill_id) from a ``skill_id:intent`` label."""
+        return name.split(":", 1)[0] if ":" in name else name
+
+    def _build_container(self):
+        return DomainIntentContainer(fuzz=bool(self.config.get("fuzz")),
+                                     n_workers=self.workers)
+
+    def _container_add_intent(self, container: DomainIntentContainer,
+                              name: str, samples: List[str]) -> None:
+        domain = self._domain_of(name)
+        container.register_domain_intent(domain, name, samples)
+
+    def _container_add_entity(self, container: DomainIntentContainer,
+                              name: str, samples: List[str]) -> None:
+        # Entities are shared across domains: add to every existing
+        # sub-container so templates resolve uniformly.
+        for sub in container.domains.values():
+            sub.add_entity(name, samples)
+
+    def _container_remove_intent(self, container: DomainIntentContainer,
+                                  name: str) -> None:
+        domain = self._domain_of(name)
+        container.remove_domain_intent(domain, name)
+        # If the domain has no remaining intents, drop the domain entry.
+        sub = container.domains.get(domain)
+        if sub is not None and not getattr(sub, "intent_samples", {}):
+            container.remove_domain(domain)
+
+    def _container_remove_entity(self, container: DomainIntentContainer,
+                                  name: str) -> None:
+        for sub in container.domains.values():
+            try:
+                sub.remove_entity(name)
+            except Exception:
+                pass
+
+    def _container_has_intent(self, container: DomainIntentContainer,
+                              name: str) -> bool:
+        domain = self._domain_of(name)
+        sub = container.domains.get(domain)
+        if sub is None:
+            return False
+        return name in getattr(sub, "intent_samples", {})
+
+    def _container_exclude_keywords(self, container: DomainIntentContainer,
+                                    name: str, keywords: List[str]) -> None:
+        domain = self._domain_of(name)
+        sub = container.domains.get(domain)
+        if sub is not None:
+            sub.exclude_keywords(name, keywords)
+
+    def _container_get_intent_samples(self, container: DomainIntentContainer,
+                                      name: str) -> Optional[List[str]]:
+        domain = self._domain_of(name)
+        sub = container.domains.get(domain)
+        if sub is None:
+            return None
+        return getattr(sub, "intent_samples", {}).get(name)
+
+    # ------------------------------------------------------------------
+    # Matching - delegate to DomainIntentContainer.calc_intent
+    # ------------------------------------------------------------------
+
+    def _calc_one(self, utt: str, intent_container: DomainIntentContainer,
+                  blacklisted_intents: frozenset,
+                  blacklisted_skills: frozenset) -> Optional[PadaciosoIntent]:
+        try:
+            match = intent_container.calc_intent(utt)
+            if not match or not match.get("name"):
+                return None
+            label = match["name"]
+            if label in blacklisted_intents:
+                return None
+            if label.split(":")[0] in blacklisted_skills:
+                return None
+            match.pop("_matched_regex", None)
+            if "entities" in match:
+                match["matches"] = match.pop("entities")
+            match["sent"] = utt
+            intent = PadaciosoIntent(**match)
+            intent.sent = utt
+            return intent
+        except Exception as e:
+            LOG.error(e)
+            return None
