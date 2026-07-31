@@ -225,6 +225,15 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """Return whether the container already knows ``name`` (reload path)."""
         return name in getattr(container, "intent_samples", {})
 
+    def _container_exclude_keywords(self, container, name: str,
+                                    keywords: List[str]) -> None:
+        """Register suppression keywords for ``name`` on the container."""
+        container.exclude_keywords(name, keywords)
+
+    def _container_get_intent_samples(self, container, name: str) -> Optional[List[str]]:
+        """Return the live registered samples for ``name``, or ``None``."""
+        return getattr(container, "intent_samples", {}).get(name)
+
     # ------------------------------------------------------------------
 
     def __detach_intent(self, intent_name):
@@ -440,14 +449,14 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self._template_samples[(lang, name)] = list(samples)
         self._store_context_gate(name, data)
         try:
-            self.containers[lang].add_intent(name, samples)
+            self._container_add_intent(self.containers[lang], name, samples)
         except RuntimeError:
-            if name not in self.containers[lang].intent_samples:
+            if not self._container_has_intent(self.containers[lang], name):
                 raise
 
         blacklist = data.get("blacklist")
         if blacklist:  # §6.1 suppression phrases
-            self.containers[lang].exclude_keywords(name, list(blacklist))
+            self._container_exclude_keywords(self.containers[lang], name, list(blacklist))
 
     def handle_register_entity(self, message: Message):
         """OVOS-INTENT-4 §7 — register an entity value-set hint."""
@@ -479,7 +488,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             e for e in self.registered_entities
             if not (e.get("name") == name and e.get("lang") == lang)]
         self.registered_entities.append({"name": name, "lang": lang})
-        self.containers[lang].add_entity(name, samples)
+        self._container_add_entity(self.containers[lang], name, samples)
 
     def _intent_langs(self, message: Message) -> List[str]:
         """Resolve which container langs a deregister/enable/disable targets.
@@ -539,12 +548,12 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         intent_name = message.data.get("intent_name")
         name = self._internal_name(skill_id, intent_name)
         for lang in self._intent_langs(message):
-            samples = self.containers[lang].intent_samples.get(name)
+            samples = self._container_get_intent_samples(self.containers[lang], name)
             if samples is not None:
                 # retain the live samples so a legacy-registered intent (which
                 # never populated ``_template_samples``) can still be re-armed
                 self._disabled_intents[(lang, name)] = list(samples)
-                self.containers[lang].remove_intent(name)
+                self._container_remove_intent(self.containers[lang], name)
 
     def handle_enable_intent(self, message: Message):
         """OVOS-INTENT-4 §8.5 — re-arm a previously disabled intent."""
@@ -552,7 +561,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         intent_name = message.data.get("intent_name")
         name = self._internal_name(skill_id, intent_name)
         for lang in self._intent_langs(message):
-            if name in self.containers[lang].intent_samples:
+            if self._container_has_intent(self.containers[lang], name):
                 self._disabled_intents.pop((lang, name), None)
                 continue  # already enabled, no-op
             # prefer the samples stashed at disable time (works for both the
@@ -561,7 +570,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             samples = (self._disabled_intents.pop((lang, name), None)
                        or self._template_samples.get((lang, name)))
             if samples:
-                self.containers[lang].add_intent(name, samples)
+                self._container_add_intent(self.containers[lang], name, samples)
 
     def calc_intent(self, utterances: List[str], lang: str = None,
                     message: Optional[Message] = None) -> Optional[PadaciosoIntent]:
@@ -827,6 +836,21 @@ class DomainPadaciosoPipeline(PadaciosoPipeline):
         if sub is None:
             return False
         return name in getattr(sub, "intent_samples", {})
+
+    def _container_exclude_keywords(self, container: DomainIntentContainer,
+                                    name: str, keywords: List[str]) -> None:
+        domain = self._domain_of(name)
+        sub = container.domains.get(domain)
+        if sub is not None:
+            sub.exclude_keywords(name, keywords)
+
+    def _container_get_intent_samples(self, container: DomainIntentContainer,
+                                      name: str) -> Optional[List[str]]:
+        domain = self._domain_of(name)
+        sub = container.domains.get(domain)
+        if sub is None:
+            return None
+        return getattr(sub, "intent_samples", {}).get(name)
 
     # ------------------------------------------------------------------
     # Matching - delegate to DomainIntentContainer.calc_intent
