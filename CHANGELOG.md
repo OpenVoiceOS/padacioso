@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.2a2](https://github.com/OpenVoiceOS/padacioso/tree/2.2.2a2) (2026-08-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.2a1...2.2.2a2)
+
+**Merged pull requests:**
+
+- docs: rewrite README in Simplified Technical English [\#75](https://github.com/OpenVoiceOS/padacioso/pull/75) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.2.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.2a1) (2026-07-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.1a1...2.2.2a1)
