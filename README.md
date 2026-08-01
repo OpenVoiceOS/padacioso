@@ -1,6 +1,6 @@
 # Padacioso
 
-A lightweight, dependency-light intent parser for [OpenVoiceOS](https://openvoiceos.org), compatible with the Padatious intent file format.
+Padacioso is a dependency-light intent parser for [OpenVoiceOS](https://openvoiceos.org). It reads the same intent file format as [Padatious](https://github.com/OpenVoiceOS/ovos-padatious-pipeline-plugin), so it works as a drop-in replacement, but it matches with regex instead of a neural network.
 
 ## Features
 
@@ -8,7 +8,7 @@ A lightweight, dependency-light intent parser for [OpenVoiceOS](https://openvoic
 - `{entity}` capture groups with optional type annotations (`:int`, `:float`, `:word`)
 - Fuzzy matching fallback
 - Context gating and keyword exclusion
-- Symmetric normalization — apostrophe variants and extra whitespace are handled identically in training data and at query time
+- Symmetric normalization: apostrophe variants and extra whitespace are handled identically in training data and at query time
 
 ## Install
 
@@ -38,7 +38,7 @@ result = container.calc_intent("play bohemian rhapsody")
 | Exact match, entity value not in samples | 0.90 |
 | Exact match, unregistered entity | 0.96 |
 | Case-insensitive match | −0.05 |
-| Wildcard (`*`) — proportional to open-token ratio | −0.05 … −0.25 |
+| Wildcard (`*`), proportional to open-token ratio | −0.05 … −0.25 |
 
 ### Fuzzy matching
 
@@ -71,8 +71,8 @@ When test utterances are paraphrases that stay close to the training templates:
 
 ### Natural language recall (real human utterances)
 
-When test utterances are genuinely natural — contractions, idioms, indirect phrasing, British
-colloquialisms — the benchmark uses the same training templates unchanged:
+When test utterances are genuinely natural, with contractions, idioms, indirect phrasing, and British
+colloquialisms, the benchmark uses the same training templates unchanged:
 
 | Mode | Accuracy | Precision | Recall | F1 | False positives |
 |---|---|---|---|---|---|
@@ -103,7 +103,7 @@ and are evaluated on the same 268 natural-language cases.
 padaos and padacioso `fuzz=False` are the most precise (zero false positives) but only match
 utterances that closely follow the training templates. `fuzz=True` reaches the same recall
 as the neural padatious at lower latency on cache-warm queries, but costs ~27 ms per query.
-For production use, `fuzz=False` is recommended; add `fuzz=True` only when recall on
+For production use, `fuzz=False` is recommended. Add `fuzz=True` only when recall on
 natural phrasing matters more than latency.
 
 ## Performance
@@ -113,16 +113,16 @@ Benchmarks on a mid-range laptop (single thread, Python 3.11, 500 iterations):
 | Scenario | Median | p95 |
 |---|---|---|
 | Register 20 intents | 2.7 ms | 3.2 ms |
-| Query — exact match (20 intents) | 0.46 ms | 0.72 ms |
-| Query — entity match (20 intents) | 0.48 ms | 0.69 ms |
-| Query — no match (20 intents) | 0.48 ms | 0.73 ms |
-| Query — exact match (100 intents) | 0.61 ms | 0.84 ms |
-| Query — exact match (500 intents) | 1.05 ms | 1.39 ms |
-| Query — exact match (10 000 intents) | 13.8 ms | 16.2 ms |
-| Query — no match (10 000 intents) | 31.0 ms | 33.4 ms |
+| Query, exact match (20 intents) | 0.46 ms | 0.72 ms |
+| Query, entity match (20 intents) | 0.48 ms | 0.69 ms |
+| Query, no match (20 intents) | 0.48 ms | 0.73 ms |
+| Query, exact match (100 intents) | 0.61 ms | 0.84 ms |
+| Query, exact match (500 intents) | 1.05 ms | 1.39 ms |
+| Query, exact match (10 000 intents) | 13.8 ms | 16.2 ms |
+| Query, no match (10 000 intents) | 31.0 ms | 33.4 ms |
 
 Matched queries short-circuit at 0.95 confidence, so they scan only a fraction of the intent list.
-No-match queries must exhaust every intent; above ~1 000 intents a pre-filter (BM25 or token-set) would help.
+No-match queries must exhaust every intent. Above ~1 000 intents, a pre-filter (BM25 or token-set) would help.
 
 ### Fuzzy vs non-fuzzy (20 intents)
 
@@ -136,7 +136,7 @@ No-match queries must exhaust every intent; above ~1 000 intents a pre-filter (B
 Fuzz variants are pre-computed at registration time. Two runtime gates keep per-query work low:
 a **word-count filter** skips patterns whose length differs too much from the query, and a
 **token-overlap filter** skips patterns that share no literal words with the query at all.
-Entity matches and no-match cases benefit most; near-miss queries (partial word overlap) still
+Entity matches and no-match cases benefit most. Near-miss queries (partial word overlap) still
 pay the full similarity cost. Prefer `fuzz=False` (the default) for production deployments.
 
 ## OVOS plugin
@@ -155,6 +155,11 @@ Padacioso ships as an OVOS pipeline plugin (`ovos-padacioso-pipeline-plugin`) an
   }
 }
 ```
+
+## Related projects
+
+- [ovos-padatious-pipeline-plugin](https://github.com/OpenVoiceOS/ovos-padatious-pipeline-plugin): the neural-network intent parser that Padacioso can replace
+- [simplematch](https://github.com/tfeldmann/simplematch): the pattern-matching library Padacioso builds on
 
 ## License
 
