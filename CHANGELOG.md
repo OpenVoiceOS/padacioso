@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.3a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.3a1) (2026-08-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.2a2...2.2.3a1)
+
+**Merged pull requests:**
+
+- fix: scope intent detach to the target language [\#77](https://github.com/OpenVoiceOS/padacioso/pull/77) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.2.2a2](https://github.com/OpenVoiceOS/padacioso/tree/2.2.2a2) (2026-08-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.2a1...2.2.2a2)
