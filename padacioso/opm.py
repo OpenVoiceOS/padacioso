@@ -193,23 +193,38 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """
         return self._match_level(utterances, self.conf_low, lang, message)
 
-    def __detach_intent(self, intent_name):
+    def __detach_intent(self, intent_name, lang=None):
         """ Remove an intent if it has been registered.
 
         Args:
             intent_name (str): intent identifier
+            lang (str, optional): only detach from this language's
+                container. If omitted, detach from every configured
+                language (legacy ``detach_intent``/``detach_skill`` and
+                the OVOS-INTENT-4 deregister handlers intentionally want
+                an all-langs detach when no lang is specified).
         """
         # Detach/removal must key off the same canonical name registration
         # collapsed onto, so unregistering by either the legacy `.intent`
         # alias or the OVOS-INTENT-4 canonical id works (ovos-core#831).
         intent_name = _dealias_intent_name(intent_name)
-        if intent_name in self.registered_intents:
+        if intent_name not in self.registered_intents:
+            return
+        target_langs = [lang] if lang else list(self.containers)
+        for l in target_langs:
+            if l in self.containers:
+                self.containers[l].remove_intent(intent_name)
+        # only drop the manifest/context-gate bookkeeping once the intent
+        # is gone from every language container, otherwise a scoped detach
+        # (e.g. re-registering one lang) would wrongly unregister an intent
+        # that is still matchable in the other langs
+        still_present = any(intent_name in c.intent_samples
+                             for c in self.containers.values())
+        if not still_present:
             self.registered_intents.remove(intent_name)
             self._intent_context_gates.pop(intent_name, None)
-            for lang in self.containers:
-                self.containers[lang].remove_intent(intent_name)
-            # the container was mutated; drop stale cached matches
-            _calc_padacioso_intent.cache_clear()
+        # the container was mutated; drop stale cached matches
+        _calc_padacioso_intent.cache_clear()
 
     def handle_detach_intent(self, message):
         """Messagebus handler for detaching padacioso intent.
@@ -395,9 +410,13 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         if not samples:  # §6.3 — reject only when nothing valid remains
             self._warn_malformed(topic, data, "no valid samples remain")
             return
-        # §8.1 replacement is implicit: a re-registration replaces the prior entry
-        self.__detach_intent(name)
-        self.registered_intents.append(name)
+        # §8.1 replacement is implicit: a re-registration replaces the prior
+        # entry for THIS language only, other configured languages that
+        # share the same canonical name (multi-lang skills registering
+        # once per lang) must stay matchable
+        self.__detach_intent(name, lang=lang)
+        if name not in self.registered_intents:
+            self.registered_intents.append(name)
         self._template_samples[(lang, name)] = list(samples)
         self._store_context_gate(name, data)
         try:
