@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.4a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.4a1) (2026-08-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.3a1...2.2.4a1)
+
+**Merged pull requests:**
+
+- fix: replace-on-reregister on the legacy wire contracts [\#79](https://github.com/OpenVoiceOS/padacioso/pull/79) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.2.3a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.3a1) (2026-08-10)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.2a2...2.2.3a1)
