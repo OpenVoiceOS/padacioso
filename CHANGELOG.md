@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.5a2](https://github.com/OpenVoiceOS/padacioso/tree/2.2.5a2) (2026-08-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.5a1...2.2.5a2)
+
+**Merged pull requests:**
+
+- docs: prerelease-quirks entry for last-write-wins registration [\#83](https://github.com/OpenVoiceOS/padacioso/pull/83) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.2.5a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.5a1) (2026-08-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.4a1...2.2.5a1)
