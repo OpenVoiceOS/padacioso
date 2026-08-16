@@ -136,9 +136,13 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(len(container._cased_matchers), 5)
         self.assertEqual(len(container._cased_matchers),
                          len(container._uncased_matchers))
-        # Add intent already defined
-        with self.assertRaises(RuntimeError):
-            container.add_intent("hello", ["invalid"])
+        # Re-adding an existing name replaces it (OVOS-INTENT-4 §8.1
+        # last-write-wins; wire registrations race on thread-pooled handlers)
+        container.add_intent("hello", ["hiya"])
+        self.assertEqual(len(container.intent_samples['hello']), 1)
+        container.add_intent("hello", ["hi", "hello", "howdy",
+                                       "how (are you|do you do)"])
+        self.assertEqual(len(container.intent_samples['hello']), 5)
         # Add second intent
         container.add_intent("test", ["test(ing|)"])
         self.assertEqual(len(container.intent_samples['test']), 2)
@@ -157,9 +161,9 @@ class TestIntentContainer(unittest.TestCase):
         # Add entity valid
         container.add_entity("entity", ["test(ing|)", "another test"])
         self.assertEqual(len(container.entity_samples["entity"]), 3)
-        # Add entity already defined
-        with self.assertRaises(RuntimeError):
-            container.add_entity("entity", ["invalid"])
+        # Re-adding an existing entity replaces it (§8.1 last-write-wins)
+        container.add_entity("entity", ["solo"])
+        self.assertEqual(len(container.entity_samples["entity"]), 1)
         # Remove entity
         container.remove_entity("entity")
         self.assertNotIn("entity", container.entity_samples.keys())
