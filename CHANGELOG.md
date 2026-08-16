@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.5a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.5a1) (2026-08-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.4a1...2.2.5a1)
+
+**Merged pull requests:**
+
+- fix: engine add is last-write-wins, never raises on re-registration [\#81](https://github.com/OpenVoiceOS/padacioso/pull/81) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.2.4a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.4a1) (2026-08-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.3a1...2.2.4a1)
