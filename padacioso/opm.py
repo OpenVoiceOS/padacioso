@@ -337,15 +337,15 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         lang = message.data.get('lang', self.lang)
         lang = standardize_lang(lang)
         if lang in self.containers:
-            try:
-                registered = self._register_object(
-                    message, 'intent', self.containers[lang].add_intent, lang)
-            except RuntimeError:
-                name = message.data.get('name', "")
-                # padacioso fails on reloading a skill, just ignore
-                if name not in self.containers[lang].intent_samples:
-                    raise
-                registered = True
+            # §8.1 replacement is implicit: the same name arriving again
+            # (skill reload, or the OVOS-INTENT-4 dual-emit landing on both
+            # wire contracts in either order) replaces the prior entry
+            # instead of tripping the engine's re-registration guard
+            name = message.data.get('name', "")
+            if name and name in self.containers[lang].intent_samples:
+                self.containers[lang].remove_intent(name)
+            registered = self._register_object(
+                message, 'intent', self.containers[lang].add_intent, lang)
             if registered:
                 # §8.1 replacement is implicit: a re-registration of the same
                 # canonical name replaces the prior manifest entry rather
@@ -363,6 +363,14 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         lang = message.data.get('lang', self.lang)
         lang = standardize_lang(lang)
         if lang in self.containers:
+            # §8.1 replacement is implicit (see register_intent): the spec
+            # twin of this registration may already have landed
+            name = (message.data.get('name') or "").lower()
+            if name and name in self.containers[lang].entity_samples:
+                self.containers[lang].remove_entity(name)
+                self.registered_entities = [
+                    e for e in self.registered_entities
+                    if (e.get("name") or "").lower() != name]
             if self._register_object(message, 'entity',
                                      self.containers[lang].add_entity, lang):
                 self.registered_entities.append(message.data)
