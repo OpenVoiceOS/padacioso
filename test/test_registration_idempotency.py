@@ -61,3 +61,35 @@ class TestRegistrationIdempotency(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEngineReplaceSemantics(unittest.TestCase):
+    """Engine-level add is last-write-wins: concurrent wire registrations
+    (thread-pooled handlers, dual contracts) cannot be serialized by the
+    callers, so a strict raise crashes skill loading under races."""
+
+    def test_add_intent_twice_replaces(self):
+        from padacioso import IntentContainer
+        c = IntentContainer()
+        c.add_intent("greet", ["hello {name}"])
+        c.add_intent("greet", ["hi {name}"])  # must not raise
+        self.assertEqual(len([n for n in c.intent_samples if n == "greet"]), 1)
+
+    def test_add_entity_twice_replaces(self):
+        from padacioso import IntentContainer
+        c = IntentContainer()
+        c.add_entity("city", ["porto"])
+        c.add_entity("city", ["lisbon"])  # must not raise
+        self.assertEqual(len([n for n in c.entity_samples if n == "city"]), 1)
+
+    def test_concurrent_registration_never_raises(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from padacioso import IntentContainer
+        c = IntentContainer()
+        def reg(i):
+            c.add_intent("race", [f"sample {i} {{x}}"])
+            c.add_entity("slot", [f"value{i}"])
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            list(ex.map(reg, range(50)))
+        self.assertIn("race", c.intent_samples)
+        self.assertIn("slot", c.entity_samples)
