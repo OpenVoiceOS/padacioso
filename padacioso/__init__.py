@@ -120,7 +120,12 @@ class IntentContainer:
         @param lines: list of intent regexes
         """
         if name in self.intent_samples:
-            raise RuntimeError(f"Attempted to re-register existing intent: {name}")
+            # registrations arrive concurrently from the wire (dual-emit on
+            # two contracts, thread-pooled handlers): last write wins
+            # (OVOS-INTENT-4 §8.1 replacement), a raise here crashes skill
+            # loading on races the caller cannot serialize
+            LOG.debug(f"replacing existing intent: {name}")
+            self.remove_intent(name)
         expanded = []
         for line in lines:
             for e in expand(line):
@@ -169,7 +174,8 @@ class IntentContainer:
         @param lines: list of entity examples
         """
         if name in self.entity_samples:
-            raise RuntimeError(f"Attempted to re-register existing entity: {name}")
+            LOG.debug(f"replacing existing entity: {name}")
+            self.remove_entity(name)
         name = name.lower()
         expanded = []
         for line in lines:
