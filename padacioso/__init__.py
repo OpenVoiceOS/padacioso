@@ -70,6 +70,13 @@ except ImportError:
         return SequenceMatcher(None, x, against).ratio()
 
 
+#: Upper bound on expanded samples retained per intent (and per entity).
+#: Each expanded sample is resident for the process lifetime as a regex
+#: string plus two matcher objects, so an unbounded bracket product in one
+#: template can cost gigabytes across a real skill set.
+MAX_EXPANSIONS = 2000
+
+
 class IntentContainer:
     def __init__(self, fuzz=False, n_workers=4):
         self.intent_samples, self.entity_samples = {}, {}
@@ -126,10 +133,26 @@ class IntentContainer:
             # loading on races the caller cannot serialize
             LOG.debug(f"replacing existing intent: {name}")
             self.remove_intent(name)
+        # engines own bounding unbounded template data: a bracket product
+        # can explode combinatorially, and every expanded sample here costs
+        # a resident regex string plus two matcher objects for the lifetime
+        # of the process. Spread the budget across the source lines so every
+        # template contributes.
         expanded = []
+        budget = MAX_EXPANSIONS
+        per_line = max(1, budget // max(1, len(lines)))
+        overflow = False
         for line in lines:
+            taken = 0
             for e in expand(line):
+                if taken >= per_line or len(expanded) >= budget:
+                    overflow = True
+                    break
                 expanded.append(_normalize(e))
+                taken += 1
+        if overflow:
+            LOG.warning(f"intent {name!r} expands past {MAX_EXPANSIONS} "
+                        f"samples; keeping {len(expanded)} (bounded)")
         regexes = list(set(expanded))
         # literal patterns (no entities, no wildcards) first so they can
         # short-circuit before greedy entity patterns consume the query
@@ -179,7 +202,11 @@ class IntentContainer:
         name = name.lower()
         expanded = []
         for line in lines:
-            expanded += expand(line)
+            if len(expanded) >= MAX_EXPANSIONS:
+                LOG.warning(f"entity {name!r} expands past {MAX_EXPANSIONS} "
+                            f"values; keeping {len(expanded)} (bounded)")
+                break
+            expanded += expand(line)[:MAX_EXPANSIONS - len(expanded)]
         self.entity_samples[name] = set(expanded)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
