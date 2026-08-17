@@ -93,3 +93,31 @@ class TestEngineReplaceSemantics(unittest.TestCase):
             list(ex.map(reg, range(50)))
         self.assertIn("race", c.intent_samples)
         self.assertIn("slot", c.entity_samples)
+
+
+class TestBoundedExpansion(unittest.TestCase):
+    """Expanded samples are resident for the process lifetime (regex string
+    + two matchers each): an unbounded bracket product in one template must
+    not materialize past the cap."""
+
+    def test_intent_bracket_product_bounded(self):
+        from padacioso import IntentContainer, MAX_EXPANSIONS
+        c = IntentContainer()
+        # 20^4 = 160k combinations from one line
+        opts = "(" + "|".join(f"w{i}" for i in range(15)) + ")"
+        c.add_intent("boom", [f"{opts} {opts} {opts}"])
+        self.assertLessEqual(len(c.intent_samples["boom"]), MAX_EXPANSIONS)
+        self.assertGreater(len(c.intent_samples["boom"]), 0)
+
+    def test_small_intents_unbounded_behavior_unchanged(self):
+        from padacioso import IntentContainer
+        c = IntentContainer()
+        c.add_intent("greet", ["(hi|hello) {name}"])
+        self.assertEqual(len(c.intent_samples["greet"]), 2)
+
+    def test_entity_expansion_bounded(self):
+        from padacioso import IntentContainer, MAX_EXPANSIONS
+        c = IntentContainer()
+        opts = "(" + "|".join(f"v{i}" for i in range(15)) + ")"
+        c.add_entity("big", [f"{opts} {opts} {opts}"])
+        self.assertLessEqual(len(c.entity_samples["big"]), MAX_EXPANSIONS)

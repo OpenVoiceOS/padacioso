@@ -3,6 +3,15 @@
 Behavior changes since the last stable release, newest first. This file is
 reset at each stable release.
 
+## 2.2.6a1
+
+- Expanded samples are bounded: an intent retains at most 2000 expanded
+  samples (budget spread across its template lines) and an entity at most
+  2000 expanded values. Every expanded sample is resident for the process
+  lifetime as a regex string plus two matcher objects, so unbounded bracket
+  products in one template could cost gigabytes across a real skill set.
+  Templates expanding past the bound log a warning naming the intent.
+
 ## 2.2.5a1
 
 - Engine-level `add_intent`/`add_entity` are last-write-wins: re-adding an
