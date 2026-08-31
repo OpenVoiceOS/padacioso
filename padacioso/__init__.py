@@ -80,6 +80,11 @@ MAX_EXPANSIONS = 2000
 class IntentContainer:
     def __init__(self, fuzz=False, n_workers=4):
         self.intent_samples, self.entity_samples = {}, {}
+        # OVOS-CONTEXT-1 §7 — per-intent set of declared template slot names,
+        # parsed from the ``{slot}`` markers of the samples at registration.
+        # Consumed by the pipeline to offer live context entries as slot
+        # candidates for slots the utterance itself left unresolved.
+        self.intent_slots = {}
         # self.intents, self.entities = {}, {}
         self.fuzz = fuzz
         self.workers = n_workers
@@ -111,6 +116,19 @@ class IntentContainer:
             new_words[idx] = "*"
             fuzzed.append(" ".join(new_words))
         return fuzzed + [f"* {sample}", f"{sample} *"]
+
+    @staticmethod
+    def _slot_names(patterns: List[str]) -> set:
+        """Return the set of ``{slot}`` names declared across the patterns.
+
+        simplematch markers are ``{name}`` or ``{name:type}``; only the name is
+        kept. Names are lower-cased to line up with the lower-cased match keys.
+        """
+        names = set()
+        for p in patterns:
+            for m in re.finditer(r"\{\s*(\w+)", p):
+                names.add(m.group(1).lower())
+        return names
 
     @staticmethod
     def _literal_words(pattern: str) -> frozenset:
@@ -158,6 +176,7 @@ class IntentContainer:
         # short-circuit before greedy entity patterns consume the query
         regexes.sort(key=lambda r: (0 if "{" not in r and "*" not in r else 1, -len(r)))
         self.intent_samples[name] = regexes
+        self.intent_slots[name] = self._slot_names(regexes)
         for r in regexes:
             cm = simplematch.Matcher(r, case_sensitive=True)
             um = simplematch.Matcher(r, case_sensitive=False)
@@ -181,6 +200,7 @@ class IntentContainer:
         """
         if name in self.intent_samples:
             regexes = self.intent_samples.pop(name)
+            self.intent_slots.pop(name, None)
             for rx in regexes:
                 if rx in self._cased_matchers:
                     self._cased_matchers.pop(rx)
@@ -252,7 +272,38 @@ class IntentContainer:
                 excluded_intents.append(intent_name)
         return excluded_intents
 
-    def _match(self, query, intent_name, regexes):
+    def _entity_member(self, k: str, value) -> bool:
+        """Case-insensitive membership of ``value`` in entity ``k``'s samples.
+
+        Queries are lowercased by ``_normalize`` before matching, but a
+        registered entity sample keeps whatever case the skill declared it
+        with, so a plain ``in`` check would judge a correct, utterance-
+        produced value (e.g. "bob") "not a member" of {"Bob"} purely due to
+        case — which would then let a live context candidate silently
+        overwrite it (violates §7's "utterance value always wins" rule).
+        """
+        return str(value).lower() in {s.lower() for s in self.entity_samples[k]}
+
+    def _apply_slot_candidate(self, entities, k, v, slot_context, intent_name):
+        """OVOS-CONTEXT-1 §7 — offer a live context value as a candidate for
+        slot ``k`` BEFORE the entity-membership penalty below is applied.
+
+        The utterance already bound ``v`` to ``k``, but ``v`` is not a member
+        of the registered entity's value set. Per §7, a context value supplied
+        for that slot must be offered to the matcher before the match is
+        finalized rather than patched in afterwards, since a value cannot
+        correct a binding that has already incurred its confidence penalty.
+        If the context candidate IS a valid entity member, it replaces the
+        utterance-extracted value and the penalty is skipped.
+        """
+        owner_id = intent_name.split(":")[0]
+        candidate = slot_context.get((owner_id, k)) if slot_context else None
+        if candidate is not None and self._entity_member(k, candidate):
+            entities[k] = candidate
+            return True
+        return False
+
+    def _match(self, query, intent_name, regexes, slot_context=None):
         query_has_upper = query != query.lower()
         for r in regexes:
             penalty = self._regex_penalty.get(r, 0.0)
@@ -273,7 +324,9 @@ class IntentContainer:
                     if k not in self.entity_samples:
                         # penalize unregistered entities
                         penalty += 0.04
-                    elif str(v) not in self.entity_samples[k]:
+                    elif not self._entity_member(k, v):
+                        if self._apply_slot_candidate(entities, k, v, slot_context, intent_name):
+                            continue
                         # penalize parsed entity value not in samples
                         penalty += 0.1
                 return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name, "_matched_regex": r}
@@ -295,7 +348,9 @@ class IntentContainer:
                     if k not in self.entity_samples:
                         # penalize unregistered entities
                         penalty += entity_penalty
-                    elif str(v) not in self.entity_samples[k]:
+                    elif not self._entity_member(k, v):
+                        if self._apply_slot_candidate(entities, k, v, slot_context, intent_name):
+                            continue
                         # penalize parsed entity value not in samples
                         penalty += 0.1
                 return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name, "_matched_regex": r}
@@ -338,10 +393,14 @@ class IntentContainer:
         if entities is not None:
             return {"entities": entities or {}, "conf": score}
 
-    def calc_intents(self, query: str) -> Iterator[dict]:
+    def calc_intents(self, query: str, slot_context=None) -> Iterator[dict]:
         """
         Determine possible intents for a given query
         @param query: input to evaluate for an intent match
+        @param slot_context: OVOS-CONTEXT-1 §7 — optional mapping of
+            ``(owner_id, slot_name) -> value`` of live session context
+            candidates, offered to the matcher before it resolves competing
+            regex candidates
         @return: yields dict intent matches
         """
         query = _normalize(query)
@@ -358,7 +417,7 @@ class IntentContainer:
         for intent_name, regexes in self._intent_list:
             if intent_name in excluded_intents:
                 continue
-            res = self._match(query, intent_name, regexes)
+            res = self._match(query, intent_name, regexes, slot_context)
             if res is not None:
                 yield res
 

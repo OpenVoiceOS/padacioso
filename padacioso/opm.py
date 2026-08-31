@@ -9,8 +9,9 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import SessionManager, Session
 from ovos_config.config import Configuration
 from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, IntentHandlerMatch
-from ovos_spec_tools import closest_lang, standardize_lang, SpecMessage, gate_satisfied, \
-    expand, MalformedTemplate
+from ovos_spec_tools import (closest_lang, standardize_lang, SpecMessage,
+                             gate_satisfied, expand, MalformedTemplate,
+                             context_slot_candidates)
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG, log_deprecation
@@ -105,8 +106,47 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # lang and of the enable/disable/detach match state: retained until the
         # intent is deregistered/detached so a re-armed intent keeps its gate.
         self._intent_context_gates = {}
+        # OVOS-INTENT-2 §4.3 — per-slot value blacklists, keyed by internal
+        # intent name -> {slot_name: [blacklisted values]}. A slot bound by the
+        # utterance to a blacklisted value is treated as unresolved so the
+        # OVOS-CONTEXT-1 §7 slot fill can supply it from session context.
+        self._intent_slot_blacklists = {}
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded Padacioso intent parser.')
+
+    def _store_slot_blacklist(self, name: str, data: Dict):
+        """OVOS-INTENT-2 §4.3 — retain per-slot value blacklists for an intent.
+
+        The registration payload may carry a ``slot_blacklist`` mapping (or a
+        dict-typed ``blacklist``) keyed by slot name -> list of values that must
+        never bind that slot. Absent/empty declarations clear any prior entry.
+        """
+        blacklist = data.get("slot_blacklist")
+        if blacklist is None and isinstance(data.get("blacklist"), dict):
+            # the intent-level ``blacklist`` (§6.1 suppression phrases) is a
+            # list; a dict here is the per-slot exclusion contract instead.
+            blacklist = data.get("blacklist")
+        if blacklist:
+            self._intent_slot_blacklists[name] = {
+                slot.lower(): list(values) for slot, values in blacklist.items()}
+        else:
+            self._intent_slot_blacklists.pop(name, None)
+
+    @staticmethod
+    def _value_blacklisted(value: str, blacklist: List[str]) -> bool:
+        """OVOS-INTENT-2 §4.3 whole-value blacklist match.
+
+        Matches ovos-padatious-pipeline-plugin's ``_fill_context_slots``: the
+        ENTIRE bound value must equal a blacklist entry (word-list equality
+        after lowercasing), not merely contain one. A multi-word value that
+        happens to contain a blacklisted word ("the it crowd" vs ["it"],
+        "her majesty" vs ["her"]) is a legitimate binding and must survive.
+        """
+        v_words = value.lower().split()
+        for bad in blacklist:
+            if v_words == str(bad).lower().split():
+                return True
+        return False
 
     def _store_context_gate(self, name: str, data: Dict):
         """OVOS-CONTEXT-1 §6 — retain optional context gates for an intent.
@@ -223,6 +263,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         if not still_present:
             self.registered_intents.remove(intent_name)
             self._intent_context_gates.pop(intent_name, None)
+            self._intent_slot_blacklists.pop(intent_name, None)
         # the container was mutated; drop stale cached matches
         _calc_padacioso_intent.cache_clear()
 
@@ -353,6 +394,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
                 if message.data['name'] not in self.registered_intents:
                     self.registered_intents.append(message.data['name'])
                 self._store_context_gate(message.data['name'], message.data)
+                self._store_slot_blacklist(message.data['name'], message.data)
 
     def register_entity(self, message):
         """Messagebus handler for registering entities.
@@ -427,6 +469,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             self.registered_intents.append(name)
         self._template_samples[(lang, name)] = list(samples)
         self._store_context_gate(name, data)
+        self._store_slot_blacklist(name, data)
         try:
             self.containers[lang].add_intent(name, samples)
         except RuntimeError:
@@ -581,6 +624,20 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         blacklisted_skills = frozenset(sess.blacklisted_skills or [])
 
         intent_container = self.containers.get(lang)
+        ctx = sess.intent_context or {}
+        # OVOS-CONTEXT-1 §7 — resolve context slot candidates ONCE per call,
+        # across every declared slot of every registered intent for this lang,
+        # and offer them to the matcher BEFORE it resolves competing regex
+        # candidates: a value bound to an utterance token cannot be corrected
+        # after the match (and the intent-selection tie-break above it) has
+        # already run. Encoded as a hashable frozenset of
+        # (owner_id, slot, value) so it can join the lru_cache key below.
+        slot_context = frozenset(
+            (name.split(":")[0], slot, str(value))
+            for name, slots in intent_container.intent_slots.items()
+            for slot, value in context_slot_candidates(
+                ctx, list(slots), owner_id=name.split(":")[0]).items()
+        ) if ctx else frozenset()
         # Invalidate the burst cache once per match call: registrations,
         # deregistrations, disables and detaches all mutate the container
         # between calls, and a stale cache entry would keep a removed intent
@@ -588,14 +645,14 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # benefits from the cache after this clear.
         _calc_padacioso_intent.cache_clear()
         intents = [_calc_padacioso_intent(utt, intent_container,
-                                          blacklisted_intents, blacklisted_skills)
+                                          blacklisted_intents, blacklisted_skills,
+                                          slot_context)
                    for utt in utterances]
         intents = [i for i in intents if i is not None]
         # OVOS-CONTEXT-1 §6/§6.1 — drop candidates whose requires_context /
         # excludes_context gate is not satisfied by the live session context.
         # gate_satisfied handles §2 liveness, §3.1 scope and §4 decay.
         if self._intent_context_gates:
-            ctx = sess.intent_context or {}
             gated = []
             for i in intents:
                 gate = self._intent_context_gates.get(i.name)
@@ -611,7 +668,39 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             intents = gated
         # select best
         if intents:
-            return max(intents, key=lambda k: k.conf)
+            best = max(intents, key=lambda k: k.conf)
+            self._apply_slot_context(best, ctx, lang)
+            return best
+
+    def _apply_slot_context(self, intent: PadaciosoIntent, ctx: Dict, lang: str):
+        """OVOS-CONTEXT-1 §7 fill-in-the-gaps + OVOS-INTENT-2 §4.3 blacklist.
+
+        The entity-typed-slot case (a bound value failing entity membership) is
+        already corrected BEFORE matching, inside ``IntentContainer._match``
+        (see ``slot_context`` threaded through ``calc_intent`` above). What
+        remains here is: (1) unbind any slot the utterance filled with a
+        blacklisted value (§4.3), and (2) fill any declared template slot that
+        the winning match still leaves entirely unresolved (no sibling sample
+        captured it at all) from live session context. A value the utterance
+        itself produced always wins and is never overwritten.
+        """
+        slot_names = self.containers[lang].intent_slots.get(intent.name)
+        if not slot_names:
+            return
+        # §4.3 — un-bind slots the utterance filled with a blacklisted value
+        for slot, values in self._intent_slot_blacklists.get(intent.name, {}).items():
+            bound = intent.matches.get(slot)
+            if bound is not None and self._value_blacklisted(str(bound), values):
+                intent.matches.pop(slot, None)
+        # §7 — fill any slot still unresolved from live context
+        unresolved = [s for s in slot_names if not intent.matches.get(s)]
+        if not unresolved:
+            return
+        owner_id = intent.name.split(":")[0]
+        for slot, value in context_slot_candidates(
+                ctx or {}, unresolved, owner_id=owner_id).items():
+            if not intent.matches.get(slot):  # utterance value always wins
+                intent.matches[slot] = value
 
     def _get_closest_lang(self, lang: str) -> Optional[str]:
         if self.containers:
@@ -686,21 +775,26 @@ def _canonicalize_blacklist(blacklisted_intents: frozenset) -> frozenset:
 def _calc_padacioso_intent(utt: str,
                            intent_container: FallbackIntentContainer,
                            blacklisted_intents: frozenset = frozenset(),
-                           blacklisted_skills: frozenset = frozenset()) -> \
+                           blacklisted_skills: frozenset = frozenset(),
+                           slot_context: frozenset = frozenset()) -> \
         Optional[PadaciosoIntent]:
     """
     Try to match an utterance to an intent in an intent_container
 
-    The session blacklists are passed as hashable frozensets so this stays
-    ``lru_cache``-able (Session is unhashable under ovos-bus-client>=2.4.0a1).
+    The session blacklists (and the OVOS-CONTEXT-1 §7 slot candidates) are
+    passed as hashable frozensets so this stays ``lru_cache``-able (Session is
+    unhashable under ovos-bus-client>=2.4.0a1); a session with different live
+    context therefore never reuses another session's cached match.
     @return: matched PadaciosoIntent
     """
     try:
         blacklisted_intents = _canonicalize_blacklist(blacklisted_intents)
+        slot_context_map = {(owner, slot): value
+                            for owner, slot, value in slot_context}
         # Matches are canonical by construction (registration-time alias
         # collapse, see PadaciosoPipeline.register_intent), so only the
         # blacklist needs canonicalizing here.
-        intents = [i for i in intent_container.calc_intents(utt)
+        intents = [i for i in intent_container.calc_intents(utt, slot_context_map)
                    if i is not None
                    and i["name"] not in blacklisted_intents
                    and i["name"].split(":")[0] not in blacklisted_skills]
