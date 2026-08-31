@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.0a1) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.6a1...2.3.0a1)
+
+**Merged pull requests:**
+
+- feat: CONTEXT-1 §7 uniform slot fill + INTENT-2 §4.3 slot blacklist [\#69](https://github.com/OpenVoiceOS/padacioso/pull/69) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.2.6a1](https://github.com/OpenVoiceOS/padacioso/tree/2.2.6a1) (2026-08-17)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.5a2...2.2.6a1)
