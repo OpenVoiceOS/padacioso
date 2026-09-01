@@ -1,3 +1,4 @@
+import random
 import re
 from typing import List, Iterator, Optional
 
@@ -155,22 +156,37 @@ class IntentContainer:
         # can explode combinatorially, and every expanded sample here costs
         # a resident regex string plus two matcher objects for the lifetime
         # of the process. Spread the budget across the source lines so every
-        # template contributes.
+        # template contributes, and sample each line's expansions uniformly
+        # (reservoir sampling, seeded deterministically by intent name and
+        # line index) rather than keeping only the first N, so a truncated
+        # line still contributes coverage from across its whole range.
         expanded = []
         budget = MAX_EXPANSIONS
         per_line = max(1, budget // max(1, len(lines)))
-        overflow = False
-        for line in lines:
-            taken = 0
-            for e in expand(line):
-                if taken >= per_line or len(expanded) >= budget:
-                    overflow = True
-                    break
-                expanded.append(_normalize(e))
-                taken += 1
-        if overflow:
+        overflowed_lines = []
+        for idx, line in enumerate(lines):
+            rng = random.Random(f"{name}:{idx}")
+            reservoir = []
+            total = 0
+            for i, e in enumerate(expand(line)):
+                total = i + 1
+                if i < per_line:
+                    reservoir.append(e)
+                else:
+                    j = rng.randint(0, i)
+                    if j < per_line:
+                        reservoir[j] = e
+            if total > per_line:
+                overflowed_lines.append((idx, line, total))
+            expanded.extend(_normalize(e) for e in reservoir)
+        if overflowed_lines:
+            details = "; ".join(
+                f"line {idx} ({line[:40]!r}) expands to {total}"
+                for idx, line, total in overflowed_lines
+            )
             LOG.warning(f"intent {name!r} expands past {MAX_EXPANSIONS} "
-                        f"samples; keeping {len(expanded)} (bounded)")
+                        f"samples ({details}); sampling {per_line} per line "
+                        f"uniformly, keeping {len(expanded)} total (bounded)")
         regexes = list(set(expanded))
         # literal patterns (no entities, no wildcards) first so they can
         # short-circuit before greedy entity patterns consume the query
