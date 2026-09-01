@@ -5,6 +5,13 @@ reset at each stable release.
 
 ## 2.3.0a1
 
+- A truncated intent template line now contributes samples spread uniformly
+  across its full expansion (deterministic reservoir sampling seeded by the
+  intent name and line index) instead of only its first N, so a heavy
+  bracket/alternation line no longer drops phrasings that happen to expand
+  late. The truncation warning now names the intent, the offending line
+  index and a text prefix, the line's expansion count, and the 2000-sample
+  cap.
 - OVOS-CONTEXT-1 §7 uniform slot fill: a declared template slot (`{slot}`)
   the utterance leaves unresolved is filled from a live, non-null
   `session.intent_context` entry (private `<skill_id>:name` taking
