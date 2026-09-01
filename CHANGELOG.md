@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.1a1) (2026-09-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.0a1...2.3.1a1)
+
+**Merged pull requests:**
+
+- fix: warn and sample uniformly when the intent sample cap truncates a line [\#88](https://github.com/OpenVoiceOS/padacioso/pull/88) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.3.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.0a1) (2026-08-31)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.2.6a1...2.3.0a1)
