@@ -71,16 +71,31 @@ except ImportError:
         return SequenceMatcher(None, x, against).ratio()
 
 
-#: Upper bound on expanded samples retained per intent (and per entity).
-#: Each expanded sample is resident for the process lifetime as a regex
-#: string plus two matcher objects, so an unbounded bracket product in one
-#: template can cost gigabytes across a real skill set.
-MAX_EXPANSIONS = 2000
+#: Default upper bound on expanded samples retained per intent (and per
+#: entity). Each expanded sample is resident for the process lifetime as a
+#: regex string plus two matcher objects, so an unbounded bracket product in
+#: one template can cost gigabytes across a real skill set.
+#:
+#: A phrasing dropped by this bound can NEVER match: the samples kept here
+#: are the only regexes ``calc_intent`` ever tests against, and entity
+#: values dropped here can never validate as that entity type. Measured
+#: against ovos-skill-alerts' shipped templates, the old default of 2000
+#: silently lost most of the coverage (de-DE matched 342/1000 phrasings at
+#: 2000 vs 968/1000 at 200000; pt-PT matched 631/1000 vs 1000/1000), so the
+#: default is set an order of magnitude higher, comfortably inside the
+#: measured safe range. Pass ``max_expansions`` to :class:`IntentContainer`
+#: to raise or lower it per deployment.
+MAX_EXPANSIONS = 50000
 
 
 class IntentContainer:
-    def __init__(self, fuzz=False, n_workers=4):
+    def __init__(self, fuzz=False, n_workers=4, max_expansions=MAX_EXPANSIONS):
         self.intent_samples, self.entity_samples = {}, {}
+        # per-instance override of the module default MAX_EXPANSIONS, so a
+        # deployment with a pathological template can lower the resident
+        # memory cost (or raise it, if it has the budget) without touching
+        # every other container in the process.
+        self.max_expansions = max_expansions
         # OVOS-CONTEXT-1 §7 — per-intent set of declared template slot names,
         # parsed from the ``{slot}`` markers of the samples at registration.
         # Consumed by the pipeline to offer live context entries as slot
@@ -161,7 +176,7 @@ class IntentContainer:
         # line index) rather than keeping only the first N, so a truncated
         # line still contributes coverage from across its whole range.
         expanded = []
-        budget = MAX_EXPANSIONS
+        budget = self.max_expansions
         per_line = max(1, budget // max(1, len(lines)))
         overflowed_lines = []
         for idx, line in enumerate(lines):
@@ -180,13 +195,18 @@ class IntentContainer:
                 overflowed_lines.append((idx, line, total))
             expanded.extend(_normalize(e) for e in reservoir)
         if overflowed_lines:
+            dropped = sum(total - per_line for _, _, total in overflowed_lines)
             details = "; ".join(
-                f"line {idx} ({line[:40]!r}) expands to {total}"
+                f"line {idx} ({line[:40]!r}) expands to {total}, "
+                f"{total - per_line} phrasings dropped"
                 for idx, line, total in overflowed_lines
             )
-            LOG.warning(f"intent {name!r} expands past {MAX_EXPANSIONS} "
-                        f"samples ({details}); sampling {per_line} per line "
-                        f"uniformly, keeping {len(expanded)} total (bounded)")
+            LOG.warning(f"intent {name!r} exceeds max_expansions={budget}: "
+                        f"{details}. {dropped} phrasings across this intent "
+                        f"will NOT match any utterance (only {per_line} "
+                        f"per overflowing line are kept, uniformly sampled). "
+                        f"Raise IntentContainer(max_expansions=...) if this "
+                        f"intent needs to keep more.")
         regexes = list(set(expanded))
         # literal patterns (no entities, no wildcards) first so they can
         # short-circuit before greedy entity patterns consume the query
@@ -236,13 +256,44 @@ class IntentContainer:
             LOG.debug(f"replacing existing entity: {name}")
             self.remove_entity(name)
         name = name.lower()
+        # same treatment as add_intent: spread the budget across the source
+        # lines and sample each line's expansions uniformly (reservoir
+        # sampling), rather than keeping only the first N overall — a hard
+        # truncation here silently drops whichever values expand last, and
+        # a value this entity never retains can never validate a match
+        # against it (see the entity_samples membership check in matches()).
         expanded = []
-        for line in lines:
-            if len(expanded) >= MAX_EXPANSIONS:
-                LOG.warning(f"entity {name!r} expands past {MAX_EXPANSIONS} "
-                            f"values; keeping {len(expanded)} (bounded)")
-                break
-            expanded += expand(line)[:MAX_EXPANSIONS - len(expanded)]
+        budget = self.max_expansions
+        per_line = max(1, budget // max(1, len(lines)))
+        overflowed_lines = []
+        for idx, line in enumerate(lines):
+            rng = random.Random(f"{name}:{idx}")
+            reservoir = []
+            total = 0
+            for i, e in enumerate(expand(line)):
+                total = i + 1
+                if i < per_line:
+                    reservoir.append(e)
+                else:
+                    j = rng.randint(0, i)
+                    if j < per_line:
+                        reservoir[j] = e
+            if total > per_line:
+                overflowed_lines.append((idx, line, total))
+            expanded.extend(reservoir)
+        if overflowed_lines:
+            dropped = sum(total - per_line for _, _, total in overflowed_lines)
+            details = "; ".join(
+                f"line {idx} ({line[:40]!r}) expands to {total}, "
+                f"{total - per_line} values dropped"
+                for idx, line, total in overflowed_lines
+            )
+            LOG.warning(f"entity {name!r} exceeds max_expansions={budget}: "
+                        f"{details}. {dropped} values across this entity "
+                        f"will NEVER validate a match (only {per_line} per "
+                        f"overflowing line are kept, uniformly sampled). "
+                        f"Raise IntentContainer(max_expansions=...) if this "
+                        f"entity needs to keep more.")
         self.entity_samples[name] = set(expanded)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
