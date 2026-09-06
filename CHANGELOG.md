@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.2a1) (2026-09-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.1a1...2.3.2a1)
+
+**Merged pull requests:**
+
+- fix: raise max\_expansions default, make it configurable, fix entity hard-truncation [\#91](https://github.com/OpenVoiceOS/padacioso/pull/91) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.3.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.1a1) (2026-09-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.0a1...2.3.1a1)
