@@ -488,6 +488,27 @@ class IntentContainer:
             if res is not None:
                 yield res
 
+    def _tie_key(self, t: dict):
+        """Order tied intent matches by pattern specificity, not by name.
+
+        A literal (slot-free) pattern beats one with entities/wildcards; among
+        those, the pattern capturing the smaller share of its tokens as slots
+        is more specific and wins. The regex wildcard penalty and, only as a
+        final deterministic fallback, the intent name break any remaining tie.
+        Shared by ``calc_intent`` above and ``opm.py``'s pipeline-level
+        tie-break so both paths resolve ties identically.
+        """
+        r = t.get("_matched_regex", "")
+        is_literal = "{" not in r and "*" not in r
+        tokens = r.split()
+        slot_share = sum(1 for tok in tokens if "{" in tok or "*" in tok) / len(tokens) if tokens else 0.0
+        return (
+            0 if is_literal else 1,  # literal beats entity/wildcard
+            slot_share,  # smaller share of slots = more specific pattern wins
+            self._regex_penalty.get(r, 1.0),
+            t["name"],  # deterministic final fallback only
+        )
+
     def calc_intent(self, query: str) -> Optional[dict]:
         """
         Determine the best intent match for a given query
@@ -528,15 +549,7 @@ class IntentContainer:
 
         if len(ties) > 1:
             LOG.info(f"tied intents: {[t['name'] for t in ties]}")
-            def _tie_key(t):
-                r = t.get("_matched_regex", "")
-                is_literal = "{" not in r and "*" not in r
-                return (
-                    0 if is_literal else 1,  # literal beats entity/wildcard
-                    self._regex_penalty.get(r, 1.0),
-                    t["name"],
-                )
-            ties.sort(key=_tie_key)
+            ties.sort(key=self._tie_key)
 
         match = dict(ties[0])
         match.pop("_matched_regex", None)
