@@ -106,20 +106,28 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # lang and of the enable/disable/detach match state: retained until the
         # intent is deregistered/detached so a re-armed intent keeps its gate.
         self._intent_context_gates = {}
-        # OVOS-INTENT-2 §4.3 — per-slot value blacklists, keyed by internal
-        # intent name -> {slot_name: [blacklisted values]}. A slot bound by the
-        # utterance to a blacklisted value is treated as unresolved so the
-        # OVOS-CONTEXT-1 §7 slot fill can supply it from session context.
+        # OVOS-INTENT-2 §4.3 — per-slot value blacklists, keyed by
+        # (lang, internal intent name) -> {slot_name: [blacklisted values]}.
+        # Registration is per language (a skill's native_langs loop calls
+        # register_template/register_intent once per lang with that lang's
+        # own blacklist), so the store must not collapse languages onto a
+        # single intent-name key or only the last-registered lang survives.
+        # A slot bound by the utterance to a blacklisted value is treated as
+        # unresolved so the OVOS-CONTEXT-1 §7 slot fill can supply it from
+        # session context.
         self._intent_slot_blacklists = {}
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded Padacioso intent parser.')
 
-    def _store_slot_blacklist(self, name: str, data: Dict):
+    def _store_slot_blacklist(self, name: str, data: Dict, lang: str):
         """OVOS-INTENT-2 §4.3 — retain per-slot value blacklists for an intent.
 
         The registration payload may carry a ``slot_blacklist`` mapping (or a
         dict-typed ``blacklist``) keyed by slot name -> list of values that must
         never bind that slot. Absent/empty declarations clear any prior entry.
+        Registration is per language, so the entry is keyed by (lang, name):
+        a skill registering the same intent name in several languages must
+        not have an earlier language's blacklist clobbered by a later one.
         """
         blacklist = data.get("slot_blacklist")
         if blacklist is None and isinstance(data.get("blacklist"), dict):
@@ -127,10 +135,10 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             # list; a dict here is the per-slot exclusion contract instead.
             blacklist = data.get("blacklist")
         if blacklist:
-            self._intent_slot_blacklists[name] = {
+            self._intent_slot_blacklists[(lang, name)] = {
                 slot.lower(): list(values) for slot, values in blacklist.items()}
         else:
-            self._intent_slot_blacklists.pop(name, None)
+            self._intent_slot_blacklists.pop((lang, name), None)
 
     @staticmethod
     def _value_blacklisted(value: str, blacklist: List[str]) -> bool:
@@ -254,6 +262,9 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         for l in target_langs:
             if l in self.containers:
                 self.containers[l].remove_intent(intent_name)
+            # the blacklist store is keyed per (lang, name), so it is safe to
+            # drop the entry for each detached language independently
+            self._intent_slot_blacklists.pop((l, intent_name), None)
         # only drop the manifest/context-gate bookkeeping once the intent
         # is gone from every language container, otherwise a scoped detach
         # (e.g. re-registering one lang) would wrongly unregister an intent
@@ -263,7 +274,6 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         if not still_present:
             self.registered_intents.remove(intent_name)
             self._intent_context_gates.pop(intent_name, None)
-            self._intent_slot_blacklists.pop(intent_name, None)
         # the container was mutated; drop stale cached matches
         _calc_padacioso_intent.cache_clear()
 
@@ -394,7 +404,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
                 if message.data['name'] not in self.registered_intents:
                     self.registered_intents.append(message.data['name'])
                 self._store_context_gate(message.data['name'], message.data)
-                self._store_slot_blacklist(message.data['name'], message.data)
+                self._store_slot_blacklist(message.data['name'], message.data, lang)
 
     def register_entity(self, message):
         """Messagebus handler for registering entities.
@@ -469,7 +479,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             self.registered_intents.append(name)
         self._template_samples[(lang, name)] = list(samples)
         self._store_context_gate(name, data)
-        self._store_slot_blacklist(name, data)
+        self._store_slot_blacklist(name, data, lang)
         try:
             self.containers[lang].add_intent(name, samples)
         except RuntimeError:
@@ -688,7 +698,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         if not slot_names:
             return
         # §4.3 — un-bind slots the utterance filled with a blacklisted value
-        for slot, values in self._intent_slot_blacklists.get(intent.name, {}).items():
+        for slot, values in self._intent_slot_blacklists.get((lang, intent.name), {}).items():
             bound = intent.matches.get(slot)
             if bound is not None and self._value_blacklisted(str(bound), values):
                 intent.matches.pop(slot, None)
