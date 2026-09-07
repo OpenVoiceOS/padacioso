@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.3a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.3a1) (2026-09-07)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.2a1...2.3.3a1)
+
+**Merged pull requests:**
+
+- fix: key per-slot blacklists by language [\#93](https://github.com/OpenVoiceOS/padacioso/pull/93) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.3.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.2a1) (2026-09-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.1a1...2.3.2a1)
