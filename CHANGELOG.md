@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.4a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.4a1) (2026-09-07)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.3a1...2.3.4a1)
+
+**Merged pull requests:**
+
+- fix: break score ties by pattern specificity, not intent name [\#95](https://github.com/OpenVoiceOS/padacioso/pull/95) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.3.3a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.3a1) (2026-09-07)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.2a1...2.3.3a1)
