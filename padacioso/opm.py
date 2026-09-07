@@ -814,7 +814,10 @@ def _calc_padacioso_intent(utt: str,
         ties = [i for i in intents if i.get("conf", 0) == best_conf]
         if not ties:
             return None
-        # TODO - how to disambiguate ?
+        if len(ties) > 1:
+            # same rule as IntentContainer.calc_intent: prefer the more
+            # specific pattern, never the intent name
+            ties.sort(key=intent_container._tie_key)
         intent = ties[0]
         intent.pop("_matched_regex", None)
         if "entities" in intent:
