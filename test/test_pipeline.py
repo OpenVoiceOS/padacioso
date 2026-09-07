@@ -367,7 +367,7 @@ class ContextSlotFillTest(unittest.TestCase):
         self._register(svc, skill_id="weather.skill", intent_name="how_tall",
                        samples=["how tall is {person}"],
                        slot_blacklist={"person": ["he", "she", "it"]})
-        self.assertIn("weather.skill:how_tall", svc._intent_slot_blacklists)
+        self.assertIn(("en-US", "weather.skill:how_tall"), svc._intent_slot_blacklists)
         msg = self._msg_with_context(
             {"weather.skill:person": {"value": "Michael Jordan"}})
         intent = svc.calc_intent("how tall is he", "en-US", msg)
