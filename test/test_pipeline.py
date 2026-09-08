@@ -217,6 +217,142 @@ class Intent4RegistrationTest(unittest.TestCase):
         intent = svc.calc_intent("hello there", "en-US")
         self.assertEqual(intent.name, "greet.skill:hello")
 
+    def test_mismatched_register_template_uses_context_skill_id(self):
+        # OVOS-INTENT-4 §3.2 — message.context is attached by the bus client
+        # and cannot be forged by a producer, so it is authoritative: a
+        # payload skill_id that disagrees with it is logged and ignored, and
+        # the registration proceeds under the CONTEXT skill_id (matches
+        # ovos_adapt/opm.py:73 and ovos_padatious's twin helper)
+        svc = self.get_service()
+        msg = Message(self.SpecMessage.INTENT_REGISTER_TEMPLATE.value, {
+            "skill_id": "payload.skill",
+            "intent_name": "play_music",
+            "lang": "en-US",
+            "samples": ["play {query}"],
+        }, {"skill_id": "context.skill"})
+        svc.handle_register_template(msg)
+        self.assertIn("context.skill:play_music",
+                      svc.containers["en-US"].intent_samples)
+        self.assertNotIn("payload.skill:play_music",
+                         svc.containers["en-US"].intent_samples)
+
+    def test_mismatched_deregister_skill_targets_context_skill_id(self):
+        # the resolved skill_id (context, not payload) is what gets
+        # deregistered: a mismatched ovos.skill.deregister acts on the
+        # CONTEXT skill's intents, leaving the payload-named skill's own
+        # intents untouched
+        svc = self.get_service()
+        svc.handle_register_template(Message(
+            self.SpecMessage.INTENT_REGISTER_TEMPLATE.value, {
+                "skill_id": "victim.skill", "intent_name": "play_music",
+                "lang": "en-US", "samples": ["play {query}"],
+            }))
+        svc.handle_deregister_skill(Message(
+            self.SpecMessage.SKILL_DEREGISTER.value,
+            {"skill_id": "victim.skill"},
+            {"skill_id": "attacker.skill"}))
+        self.assertIn("victim.skill:play_music",
+                      svc.containers["en-US"].intent_samples)
+        intent = svc.calc_intent("play jazz", "en-US")
+        self.assertEqual(intent.name, "victim.skill:play_music")
+
+    def _register_victim(self, svc):
+        svc.bus.emit(Message(
+            self.SpecMessage.INTENT_REGISTER_TEMPLATE.value, {
+                "skill_id": "victim.skill", "intent_name": "play_music",
+                "lang": "en-US", "samples": ["play {query}"],
+            }, {"skill_id": "victim.skill"}))
+        self.assertIn("victim.skill:play_music",
+                      svc.containers["en-US"].intent_samples)
+
+    def test_bus_emitted_mismatched_deregister_skill_keeps_victim_intents(self):
+        # the bus client twins ovos.skill.deregister into the legacy
+        # detach_skill topic with the ORIGINAL context, so the legacy
+        # handler must resolve skill_id from context too: an attacker
+        # naming the victim in the payload leaves the victim's roster intact
+        svc = self.get_service()
+        self._register_victim(svc)
+        svc.bus.emit(Message(self.SpecMessage.SKILL_DEREGISTER.value,
+                             {"skill_id": "victim.skill"},
+                             {"skill_id": "attacker.skill"}))
+        self.assertEqual(list(svc.containers["en-US"].intent_samples),
+                         ["victim.skill:play_music"])
+        self.assertIn("victim.skill:play_music", svc.registered_intents)
+        intent = svc.calc_intent("play jazz", "en-US")
+        self.assertEqual(intent.name, "victim.skill:play_music")
+
+    def test_legacy_detach_skill_mismatched_context_keeps_victim_intents(self):
+        svc = self.get_service()
+        self._register_victim(svc)
+        svc.bus.emit(Message("detach_skill", {"skill_id": "victim.skill"},
+                             {"skill_id": "attacker.skill"}))
+        self.assertEqual(list(svc.containers["en-US"].intent_samples),
+                         ["victim.skill:play_music"])
+
+    def test_legacy_detach_skill_matching_context_removes_intents(self):
+        svc = self.get_service()
+        self._register_victim(svc)
+        svc.bus.emit(Message("detach_skill", {"skill_id": "victim.skill"},
+                             {"skill_id": "victim.skill"}))
+        self.assertEqual(list(svc.containers["en-US"].intent_samples), [])
+        self.assertNotIn("victim.skill:play_music", svc.registered_intents)
+
+    def test_legacy_detach_skill_without_context_keeps_legacy_behaviour(self):
+        svc = self.get_service()
+        self._register_victim(svc)
+        svc.bus.emit(Message("detach_skill", {"skill_id": "victim.skill"}))
+        self.assertEqual(list(svc.containers["en-US"].intent_samples), [])
+
+    def test_detach_intent_forged_prefix_is_rejected(self):
+        # legacy detach_intent carries the owner only as the intent_name
+        # prefix; a producer under another context must not detach it
+        svc = self.get_service()
+        self._register_victim(svc)
+        svc.bus.emit(Message("detach_intent",
+                             {"intent_name": "victim.skill:play_music"},
+                             {"skill_id": "attacker.skill"}))
+        self.assertEqual(list(svc.containers["en-US"].intent_samples),
+                         ["victim.skill:play_music"])
+        self.assertIn("victim.skill:play_music", svc.registered_intents)
+        intent = svc.calc_intent("play jazz", "en-US")
+        self.assertEqual(intent.name, "victim.skill:play_music")
+
+    def test_detach_intent_matching_prefix_detaches(self):
+        svc = self.get_service()
+        self._register_victim(svc)
+        svc.bus.emit(Message("detach_intent",
+                             {"intent_name": "victim.skill:play_music"},
+                             {"skill_id": "victim.skill"}))
+        self.assertEqual(list(svc.containers["en-US"].intent_samples), [])
+        self.assertNotIn("victim.skill:play_music", svc.registered_intents)
+
+    def test_detach_intent_without_context_keeps_legacy_behaviour(self):
+        svc = self.get_service()
+        self._register_victim(svc)
+        svc.bus.emit(Message("detach_intent",
+                             {"intent_name": "victim.skill:play_music"}))
+        self.assertEqual(list(svc.containers["en-US"].intent_samples), [])
+
+    def test_detach_intent_bare_name_with_context_keeps_legacy_behaviour(self):
+        # an unnamespaced legacy name has no owner prefix to compare, so the
+        # guard does not apply (parity with ovos_adapt and ovos_padatious)
+        svc = self.get_service()
+        svc.bus.emit(Message("padatious:register_intent", {
+            "name": "on", "samples": ["turn on the {thing}"],
+            "lang": "en-US"}, {"skill_id": "victim.skill"}))
+        self.assertIn("on", svc.containers["en-US"].intent_samples)
+        svc.bus.emit(Message("detach_intent", {"intent_name": "on"},
+                             {"skill_id": "victim.skill"}))
+        self.assertNotIn("on", svc.containers["en-US"].intent_samples)
+
+    def test_detach_intent_empty_context_skill_id_keeps_legacy_behaviour(self):
+        svc = self.get_service()
+        self._register_victim(svc)
+        svc.bus.emit(Message("detach_intent",
+                             {"intent_name": "victim.skill:play_music"},
+                             {"skill_id": ""}))
+        self.assertEqual(list(svc.containers["en-US"].intent_samples), [])
+
 
 class ContextGatingTest(unittest.TestCase):
     """OVOS-CONTEXT-1 §6/§6.1 requires_context / excludes_context gating."""

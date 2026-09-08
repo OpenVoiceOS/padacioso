@@ -280,10 +280,27 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
     def handle_detach_intent(self, message):
         """Messagebus handler for detaching padacioso intent.
 
+        The bus-client twins ``ovos.intent.deregister`` into this legacy
+        topic, building ``intent_name`` (``<skill_id>:<name>``) from the
+        payload while forwarding the producer's original context, so the
+        prefix is compared against ``context["skill_id"]`` and a mismatch
+        is rejected. A bare, unnamespaced name or a message without a
+        context skill_id keeps the pre-spec behaviour.
+
         Args:
             message (Message): message triggering action
         """
-        self.__detach_intent(message.data.get('intent_name'))
+        intent_name = message.data.get('intent_name')
+        context_skill_id = message.context.get("skill_id") if message.context else None
+        if context_skill_id and intent_name and ":" in intent_name:
+            owner = intent_name.split(":", 1)[0]
+            if owner != context_skill_id:
+                LOG.warning(f"[handle_detach_intent] rejected: intent_name="
+                            f"{intent_name!r} does not belong to "
+                            f"message.context['skill_id']={context_skill_id!r} "
+                            f"(topic={message.msg_type})")
+                return
+        self.__detach_intent(intent_name)
 
     def __detach_entity(self, name, lang):
         """ Remove an entity.
@@ -300,10 +317,16 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
     def handle_detach_skill(self, message):
         """Messagebus handler for detaching all intents for skill.
 
+        The bus-client twins ``ovos.skill.deregister`` into this legacy
+        topic with the producer's original context, so the skill_id is
+        resolved the same way as in ``handle_deregister_skill``.
+
         Args:
             message (Message): message triggering action
         """
-        skill_id = message.data['skill_id']
+        skill_id = _skill_id_from_context(message, "handle_detach_skill")
+        if not skill_id:
+            return
         prefix = skill_id + ":"
         remove_list = [i for i in self.registered_intents if i.startswith(prefix)]
         for i in remove_list:
@@ -450,7 +473,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """
         topic = SpecMessage.INTENT_REGISTER_TEMPLATE.value
         data = message.data
-        skill_id = data.get("skill_id")
+        skill_id = _skill_id_from_context(message, "handle_register_template")
         intent_name = data.get("intent_name")
         samples = data.get("samples")
         if not samples:  # §6.3 malformed
@@ -494,7 +517,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """OVOS-INTENT-4 §7 — register an entity value-set hint."""
         topic = SpecMessage.ENTITY_REGISTER.value
         data = message.data
-        skill_id = data.get("skill_id")
+        skill_id = _skill_id_from_context(message, "handle_register_entity")
         entity_name = data.get("entity_name")
         samples = data.get("samples")
         if not samples:  # §7.2 malformed
@@ -535,7 +558,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
 
     def handle_deregister_intent(self, message: Message):
         """OVOS-INTENT-4 §8.2 — remove one intent (all langs if lang omitted)."""
-        skill_id = message.data.get("skill_id")
+        skill_id = _skill_id_from_context(message, "handle_deregister_intent")
         intent_name = message.data.get("intent_name")
         name = self._internal_name(skill_id, intent_name)
         self.__detach_intent(name)
@@ -544,7 +567,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
 
     def handle_deregister_entity(self, message: Message):
         """OVOS-INTENT-4 §8.3 — remove one entity (all langs if lang omitted)."""
-        skill_id = message.data.get("skill_id")
+        skill_id = _skill_id_from_context(message, "handle_deregister_entity")
         entity_name = message.data.get("entity_name")
         name = self._internal_name(skill_id, entity_name)
         for lang in self._intent_langs(message):
@@ -554,7 +577,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
 
     def handle_deregister_skill(self, message: Message):
         """OVOS-INTENT-4 §8.4 — remove everything owned by a skill_id."""
-        skill_id = message.data.get("skill_id")
+        skill_id = _skill_id_from_context(message, "handle_deregister_skill")
         if not skill_id:
             return
         prefix = skill_id + ":"
@@ -729,6 +752,36 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.bus.remove(SpecMessage.SKILL_DEREGISTER.value, self.handle_deregister_skill)
         self.bus.remove(SpecMessage.INTENT_ENABLE.value, self.handle_enable_intent)
         self.bus.remove(SpecMessage.INTENT_DISABLE.value, self.handle_disable_intent)
+
+
+def _skill_id_from_context(message: Message, handler: str) -> Optional[str]:
+    """Resolve the skill id a handler acts on from the bus context.
+
+    When ``message.context["skill_id"]`` is set it is used, and a payload
+    ``skill_id`` that differs from it is logged and ignored, so the handler
+    proceeds under the context's name. This matches ``ovos_adapt`` and
+    ``ovos_padatious``. When the context carries no skill_id, the payload
+    value is trusted; here the helper diverges from those twins, which
+    return ``None`` in that case.
+
+    Args:
+        message: the incoming bus message
+        handler: name of the calling handler, for the warning message
+
+    Returns:
+        The skill id from the context, or the payload's when the context
+        carries none.
+    """
+    context_skill_id = message.context.get("skill_id") if message.context else None
+    payload_skill_id = message.data.get("skill_id")
+    if context_skill_id is None:
+        return payload_skill_id
+    if payload_skill_id and payload_skill_id != context_skill_id:
+        LOG.warning(f"[{handler}] message.data['skill_id']={payload_skill_id!r} "
+                    f"differs from message.context['skill_id']="
+                    f"{context_skill_id!r} on {message.msg_type}; "
+                    f"using the context value")
+    return context_skill_id
 
 
 def _dealias_intent_name(name: Optional[str]) -> Optional[str]:
