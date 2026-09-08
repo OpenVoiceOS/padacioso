@@ -304,12 +304,12 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             message (Message): message triggering action
         """
         skill_id = message.data['skill_id']
-        remove_list = [i for i in self.registered_intents if skill_id in i]
+        prefix = skill_id + ":"
+        remove_list = [i for i in self.registered_intents if i.startswith(prefix)]
         for i in remove_list:
             self.__detach_intent(i)
-        skill_id_colon = skill_id + ":"
         for en in self.registered_entities:
-            if en["name"].startswith(skill_id_colon):
+            if en["name"].startswith(prefix):
                 self.__detach_entity(en["name"], en["lang"])
 
     def _valid_samples(self, samples, topic, name, lang):
