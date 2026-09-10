@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.5a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.5a1) (2026-09-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.4a1...2.3.5a1)
+
+**Merged pull requests:**
+
+- fix: reject a section 8 payload that omits skill\_id [\#103](https://github.com/OpenVoiceOS/padacioso/pull/103) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.3.4a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.4a1) (2026-09-07)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.3a1...2.3.4a1)
