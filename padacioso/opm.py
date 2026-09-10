@@ -533,20 +533,39 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             return [lang] if lang in self.containers else []
         return list(self.containers.keys())
 
+    def _spec_target(self, message: Message, name_key: str, topic: str):
+        """The engine-internal name a §8 message acts on, or None if incomplete.
+
+        §3.2 makes the triple ``(skill_id, intent_name, lang)`` the identity of
+        an intent, and §12 forbids acting on a payload that omits one of them.
+        Without ``skill_id`` the composed name collapses to a bare
+        ``intent_name``, which for a legacy registration is another skill's
+        intent, so the message is rejected rather than resolved.
+        """
+        skill_id = message.data.get("skill_id")
+        name = message.data.get(name_key)
+        if not skill_id or not name:
+            self._warn_malformed(topic, message.data,
+                                 f"missing 'skill_id' or '{name_key}'")
+            return None
+        return self._internal_name(skill_id, name)
+
     def handle_deregister_intent(self, message: Message):
         """OVOS-INTENT-4 §8.2 — remove one intent (all langs if lang omitted)."""
-        skill_id = message.data.get("skill_id")
-        intent_name = message.data.get("intent_name")
-        name = self._internal_name(skill_id, intent_name)
+        name = self._spec_target(message, "intent_name",
+                                 SpecMessage.INTENT_DEREGISTER.value)
+        if name is None:
+            return
         self.__detach_intent(name)
         for lang in self._intent_langs(message):
             self._template_samples.pop((lang, name), None)
 
     def handle_deregister_entity(self, message: Message):
         """OVOS-INTENT-4 §8.3 — remove one entity (all langs if lang omitted)."""
-        skill_id = message.data.get("skill_id")
-        entity_name = message.data.get("entity_name")
-        name = self._internal_name(skill_id, entity_name)
+        name = self._spec_target(message, "entity_name",
+                                 SpecMessage.ENTITY_DEREGISTER.value)
+        if name is None:
+            return
         for lang in self._intent_langs(message):
             self.__detach_entity(name, lang)
         self.registered_entities = [
@@ -576,9 +595,10 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         The container has no native disable, so the regexes are removed from
         matching while the expanded samples are retained for re-arming (§8.5).
         """
-        skill_id = message.data.get("skill_id")
-        intent_name = message.data.get("intent_name")
-        name = self._internal_name(skill_id, intent_name)
+        name = self._spec_target(message, "intent_name",
+                                 SpecMessage.INTENT_DISABLE.value)
+        if name is None:
+            return
         for lang in self._intent_langs(message):
             samples = self.containers[lang].intent_samples.get(name)
             if samples is not None:
@@ -589,9 +609,10 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
 
     def handle_enable_intent(self, message: Message):
         """OVOS-INTENT-4 §8.5 — re-arm a previously disabled intent."""
-        skill_id = message.data.get("skill_id")
-        intent_name = message.data.get("intent_name")
-        name = self._internal_name(skill_id, intent_name)
+        name = self._spec_target(message, "intent_name",
+                                 SpecMessage.INTENT_ENABLE.value)
+        if name is None:
+            return
         for lang in self._intent_langs(message):
             if name in self.containers[lang].intent_samples:
                 self._disabled_intents.pop((lang, name), None)
