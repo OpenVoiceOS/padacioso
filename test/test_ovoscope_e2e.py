@@ -38,10 +38,10 @@ class _PadaciosoHarness(E2EPipelineHarness):
     pipeline: PadaciosoPipeline  # type: ignore[assignment]
 
     def _register_intent(self, name, samples):
-        register_padatious_intent(self.bus, name, samples)
+        register_padatious_intent(self.bus, name, samples, skill_id=self.SKILL_ID)
 
     def _register_entity(self, name, samples):
-        register_padatious_entity(self.bus, name, samples)
+        register_padatious_entity(self.bus, name, samples, skill_id=self.SKILL_ID)
 
 
 class TestRegisteredIntentMatch(_PadaciosoHarness):
@@ -85,7 +85,7 @@ class TestDetach(_PadaciosoHarness):
         msg = self.send_and_capture("hello", expected_types=[f"{self.SKILL_ID}:hello"])
         self.assertIsNotNone(msg)
 
-        detach_intent(self.bus, f"{self.SKILL_ID}:hello")
+        detach_intent(self.bus, f"{self.SKILL_ID}:hello", skill_id=self.SKILL_ID)
         self.expect_no_match("hello")
 
     def test_detach_skill_removes_all_its_intents(self):
