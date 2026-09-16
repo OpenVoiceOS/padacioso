@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.5a2](https://github.com/OpenVoiceOS/padacioso/tree/2.3.5a2) (2026-09-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.5a1...2.3.5a2)
+
+**Merged pull requests:**
+
+- docs: fix unreachable case-insensitive confidence claim [\#90](https://github.com/OpenVoiceOS/padacioso/pull/90) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.3.5a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.5a1) (2026-09-10)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.4a1...2.3.5a1)
