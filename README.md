@@ -37,8 +37,9 @@ result = container.calc_intent("play bohemian rhapsody")
 | Exact, cased match, registered entity value | 1.00 |
 | Exact match, entity value not in samples | 0.90 |
 | Exact match, unregistered entity | 0.96 |
-| Case-insensitive match | −0.05 |
 | Wildcard (`*`), proportional to open-token ratio | −0.05 … −0.25 |
+
+Queries and training samples are both lowercased before matching (`OVOS-INTENT-1` normalization), so a query never reaches `calc_intent` with different casing than its pattern. The case-insensitive path exists in the matcher for callers that bypass this normalization, but `calc_intent`/`calc_intents` always see already-lowercased input.
 
 ### Fuzzy matching
 
