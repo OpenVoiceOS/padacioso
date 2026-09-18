@@ -1,3 +1,6 @@
+import re
+
+
 class TreeFragment:
     """(Abstract) empty sentence fragment"""
 
@@ -214,5 +217,34 @@ def translate_padatious(example: str) -> str:
     return " ".join(tokens)
 
 
+_TYPED_SLOT = re.compile(r"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
+
+
+def degrade_typed_slots(example: str) -> str:
+    """
+    Fold an OVOS typed slot ``{type:name}`` to the bare ``{name}``.
+
+    OVOS-INTENT-1 §3.4 degrade rule: a loader that does not implement typed
+    slots MUST treat ``{type:name}`` as ``{name}``. simplematch reads the same
+    braces as its own ``{name:type}`` marker and raises KeyError on a type it
+    does not know, so a typed template broke registration here.
+
+    A marker whose part after the colon IS a registered simplematch type
+    (``{word0:word}`` from :func:`translate_padatious`) is simplematch's and is
+    left alone.
+    @param example: utterance example
+    @return: example with every OVOS typed slot folded to its name
+    """
+    import simplematch
+
+    def _fold(m):
+        before, after = m.group(1), m.group(2)
+        if after in simplematch.types:
+            return m.group(0)
+        return "{" + after + "}"
+
+    return _TYPED_SLOT.sub(_fold, example)
+
+
 def normalize_example(example: str) -> str:
-    return clean_braces(translate_padatious(example))
+    return degrade_typed_slots(clean_braces(translate_padatious(example)))

@@ -229,3 +229,32 @@ class TestIntentContainer(unittest.TestCase):
         self.assertEqual(match['entities']['word0'], 'neon')
         self.assertEqual(match['entities']['word1'], 'neon')
 
+
+
+class TestTypedSlotDegrade(unittest.TestCase):
+    """OVOS-INTENT-1 §3.4: a loader without typed slots treats {type:name}
+    as {name}. simplematch read the braces as its own {name:type} marker and
+    raised KeyError, so a typed template broke registration."""
+
+    def test_typed_slot_registers_and_matches_as_the_bare_slot(self):
+        container = IntentContainer()
+        container.add_intent("alarm", ["set an alarm in {number:offset} minutes"])
+        self.assertEqual(container.intent_samples["alarm"],
+                         ["set an alarm in {offset} minutes"])
+        match = container.calc_intent("set an alarm in 5 minutes")
+        self.assertEqual(match["name"], "alarm")
+        self.assertEqual(match["entities"], {"offset": "5"})
+
+    def test_double_brace_typed_slot_folds_the_same(self):
+        container = IntentContainer()
+        container.add_intent("when", ["remind me at {{date:when}}"])
+        self.assertEqual(container.intent_samples["when"],
+                         ["remind me at {when}"])
+
+    def test_simplematch_word_marker_is_left_alone(self):
+        # translate_padatious mints {word0:word}, simplematch's own marker
+        container = IntentContainer()
+        container.add_intent("say", ["say :0"])
+        self.assertEqual(container.intent_samples["say"], ["say {word0:word}"])
+        match = container.calc_intent("say hello")
+        self.assertEqual(match["entities"], {"word0": "hello"})
