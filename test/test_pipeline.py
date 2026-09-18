@@ -1,6 +1,6 @@
 import unittest
 
-from ovos_utils.messagebus import FakeBus
+from ovos_utils.fakebus import FakeBus
 
 from ovos_bus_client.message import Message
 from padacioso import IntentContainer
