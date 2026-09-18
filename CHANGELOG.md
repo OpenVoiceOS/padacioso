@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.0a1) (2026-09-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.6a2...2.4.0a1)
+
+**Merged pull requests:**
+
+- feat: bind a typed placeholder where the typed-slot map allows \(OVOS-INTENT-1 5.6\) [\#109](https://github.com/OpenVoiceOS/padacioso/pull/109) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.3.6a2](https://github.com/OpenVoiceOS/padacioso/tree/2.3.6a2) (2026-09-18)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.6a1...2.3.6a2)
