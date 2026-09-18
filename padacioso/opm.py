@@ -12,6 +12,10 @@ from ovos_plugin_manager.templates.pipeline import ConfidenceMatcherPipeline, In
 from ovos_spec_tools import (closest_lang, standardize_lang, SpecMessage,
                              gate_satisfied, expand, MalformedTemplate,
                              context_slot_candidates)
+from ovos_spec_tools import (REGISTERED_TYPES, MalformedTypedSlots,
+                             declared_slot_types,
+                             drop_unregistered_typed_slots,
+                             validate_typed_slots)
 from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG, log_deprecation
@@ -116,6 +120,11 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # unresolved so the OVOS-CONTEXT-1 §7 slot fill can supply it from
         # session context.
         self._intent_slot_blacklists = {}
+        # OVOS-INTENT-1 §5.6 — the type each typed placeholder declares,
+        # keyed by (lang, internal intent name) -> {slot_name: type_name}.
+        # Read at match time so a typed slot can be bound where the
+        # typed-slot map says it may.
+        self._intent_slot_types = {}
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded Padacioso intent parser.')
 
@@ -139,6 +148,25 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
                 slot.lower(): list(values) for slot, values in blacklist.items()}
         else:
             self._intent_slot_blacklists.pop((lang, name), None)
+
+    def _store_slot_types(self, name: str, data: Dict, samples: List[str],
+                          lang: str):
+        """OVOS-INTENT-1 §5.6 — record the types the templates declare.
+
+        The payload carries ``slot_types`` (OVOS-INTENT-4 §6.1) and the
+        templates state them as ``{type:name}``; the payload wins and the
+        templates fill the gap. Only registered types are kept: an unknown
+        type has no map entry to bind from and degrades to ``{name}`` (§3.4).
+        """
+        declared = dict(declared_slot_types(samples) if samples else {})
+        payload_types = data.get("slot_types")
+        if isinstance(payload_types, dict):
+            declared.update({str(k): str(v) for k, v in payload_types.items()})
+        declared = {k: v for k, v in declared.items() if v in REGISTERED_TYPES}
+        if declared:
+            self._intent_slot_types[(lang, name)] = declared
+        else:
+            self._intent_slot_types.pop((lang, name), None)
 
     @staticmethod
     def _value_blacklisted(value: str, blacklist: List[str]) -> bool:
@@ -265,6 +293,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
             # the blacklist store is keyed per (lang, name), so it is safe to
             # drop the entry for each detached language independently
             self._intent_slot_blacklists.pop((l, intent_name), None)
+            self._intent_slot_types.pop((l, intent_name), None)
         # only drop the manifest/context-gate bookkeeping once the intent
         # is gone from every language container, otherwise a scoped detach
         # (e.g. re-registering one lang) would wrongly unregister an intent
@@ -370,6 +399,18 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         _calc_padacioso_intent.cache_clear()
         return True
 
+    @staticmethod
+    def _raw_samples(message: Message) -> List[str]:
+        """The template lines as the author wrote them, prefixes included."""
+        samples = message.data.get("samples")
+        if samples:
+            return list(samples)
+        file_name = message.data.get("file_name")
+        if file_name and isfile(file_name):
+            with open(file_name) as f:
+                return [line.strip() for line in f.readlines()]
+        return []
+
     def register_intent(self, message):
         """Messagebus handler for registering intents.
 
@@ -405,6 +446,12 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
                     self.registered_intents.append(message.data['name'])
                 self._store_context_gate(message.data['name'], message.data)
                 self._store_slot_blacklist(message.data['name'], message.data, lang)
+                # the samples may have come from ``file_name``; the
+                # container keeps the expanded (bare-name) lines, so the
+                # types are read from the raw payload samples when present
+                # and from the file otherwise
+                self._store_slot_types(message.data['name'], message.data,
+                                       self._raw_samples(message), lang)
 
     def register_entity(self, message):
         """Messagebus handler for registering entities.
@@ -480,6 +527,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self._template_samples[(lang, name)] = list(samples)
         self._store_context_gate(name, data)
         self._store_slot_blacklist(name, data, lang)
+        self._store_slot_types(name, data, samples, lang)
         try:
             self.containers[lang].add_intent(name, samples)
         except RuntimeError:
@@ -700,8 +748,73 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # select best
         if intents:
             best = max(intents, key=lambda k: k.conf)
+            self._bind_typed_slots(best, message, lang)
             self._apply_slot_context(best, ctx, lang)
             return best
+
+    def _bind_typed_slots(self, intent: PadaciosoIntent,
+                          message: Optional[Message], lang: str) -> None:
+        """OVOS-INTENT-1 §5.6 — bind a typed placeholder where the map allows.
+
+        The map is a hint, not a vocabulary: it says where a datum of a kind
+        was found and what it normalizes to, and an engine MAY use it to
+        constrain where ``{type:name}`` matches. This engine prefers a listed
+        span over the template's own guess, because a regex captures every
+        word between its literals and a parser reads the datum: "set a timer
+        for about twenty minutes" gives ``{number:amount}`` no reason to drop
+        "about".
+
+        An entry applies only to the candidate this match was made from
+        (``intent.sent``, the raw utterance) and only where the span invariant
+        ``utterance[start:end] == surface`` holds, since the entries are
+        computed over every candidate and share one map. Absent or malformed
+        map, unknown type, or no entry that fits: the binding is left exactly
+        as the template made it, which is the §3.4 degrade this engine
+        already shipped.
+
+        ``Match.slots[name]`` stays the surface string (PIPELINE-1 §4.3); only
+        which surface is bound changes.
+        """
+        declared = self._intent_slot_types.get((lang, intent.name))
+        if not declared or message is None:
+            return
+        raw = message.data.get("typed_slots")
+        if not isinstance(raw, dict) or not raw:
+            return
+        try:
+            typed = drop_unregistered_typed_slots(raw)
+            validate_typed_slots(typed)
+        except MalformedTypedSlots as exc:
+            LOG.warning(f"ignoring a malformed typed_slots map "
+                        f"(INTENT-1 5.6): {exc}")
+            return
+        utterance = intent.sent or ""
+        if not utterance:
+            return
+
+        def holds(entry):
+            start, end = entry["span"]
+            return utterance[start:end] == entry["surface"]
+
+        matches = dict(intent.matches or {})
+        used_entries: Dict[str, set] = {}
+        for slot, type_name in declared.items():
+            entries = [e for e in typed.get(type_name, []) if holds(e)]
+            if not entries:
+                continue
+            bound = matches.get(slot)
+            used = used_entries.setdefault(type_name, set())
+            chosen = _closest_typed_entry(entries, utterance, bound, used=used)
+            if chosen is None:
+                continue
+            used.add(id(chosen))
+            if chosen["surface"] == bound:
+                continue
+            LOG.debug(f"Padacioso slot '{slot}' bound to the {type_name} span "
+                      f"{chosen['surface']!r} rather than {bound!r} "
+                      f"(INTENT-1 5.6)")
+            matches[slot] = chosen["surface"]
+        intent.matches = matches
 
     def _apply_slot_context(self, intent: PadaciosoIntent, ctx: Dict, lang: str):
         """OVOS-CONTEXT-1 §7 fill-in-the-gaps + OVOS-INTENT-2 §4.3 blacklist.
@@ -750,6 +863,58 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.bus.remove(SpecMessage.SKILL_DEREGISTER.value, self.handle_deregister_skill)
         self.bus.remove(SpecMessage.INTENT_ENABLE.value, self.handle_enable_intent)
         self.bus.remove(SpecMessage.INTENT_DISABLE.value, self.handle_disable_intent)
+
+
+def _closest_typed_entry(entries, utterance, bound, used=None):
+    """The listed entry that best covers what the template bound.
+
+    Overlap, not equality: the template's guess and the parser's span usually
+    share most of their characters and disagree at an edge, which is the case
+    worth correcting. With nothing bound, or nothing overlapping, no entry
+    applies -- the map states readings in the order they occur and states no
+    preference between them (OVOS-INTENT-1 §5.6).
+
+    Args:
+        entries: candidate entries for the slot's declared type.
+        utterance: the utterance the spans were computed on.
+        bound: the surface text the template already bound.
+        used: optional set of entry ids already assigned to another slot of
+            the same type; those entries are skipped so two slots of one type
+            never collapse onto one entry.
+
+    Returns:
+        The best matching entry, or ``None`` when none applies.
+    """
+    ordered = sorted(entries, key=lambda e: (e["span"][0], e["span"][1]))
+    used = used or set()
+    if not bound:
+        return None
+    best, best_overlap = None, 0
+    # The bound surface may come from the case-insensitive matcher while the
+    # spans count code points of the original utterance. ``str.lower`` does
+    # not keep length ("\u0130" lowercases to two code points), so search the
+    # lowered string and map every hit back to original offsets before
+    # comparing spans.
+    lower, origin = [], []
+    for i, ch in enumerate(utterance):
+        folded = ch.lower()
+        lower.append(folded)
+        origin.extend([i] * len(folded))
+    lower = "".join(lower)
+    token = str(bound).lower()
+    pos = lower.find(token)
+    while pos != -1:
+        start = origin[pos]
+        end = origin[pos + len(token) - 1] + 1
+        for entry in ordered:
+            if id(entry) in used:
+                continue
+            lo, hi = entry["span"]
+            overlap = min(end, hi) - max(start, lo)
+            if overlap > best_overlap:
+                best, best_overlap = entry, overlap
+        pos = lower.find(token, pos + 1)
+    return best
 
 
 def _dealias_intent_name(name: Optional[str]) -> Optional[str]:
