@@ -2,7 +2,7 @@ from padacioso import IntentContainer
 from padacioso.opm import PadaciosoPipeline
 from ovos_bus_client.message import Message
 from ovos_spec_tools import SpecMessage
-from ovos_utils.messagebus import FakeBus
+from ovos_utils.fakebus import FakeBus
 import unittest
 
 
