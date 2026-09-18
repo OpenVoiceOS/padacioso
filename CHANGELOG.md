@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.6a1](https://github.com/OpenVoiceOS/padacioso/tree/2.3.6a1) (2026-09-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.5a2...2.3.6a1)
+
+**Merged pull requests:**
+
+- fix: pass required skill\_id kwarg to ovoscope e2e helpers [\#106](https://github.com/OpenVoiceOS/padacioso/pull/106) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.3.5a2](https://github.com/OpenVoiceOS/padacioso/tree/2.3.5a2) (2026-09-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.5a1...2.3.5a2)
@@ -240,6 +248,179 @@
 **Merged pull requests:**
 
 - Update ovos-plugin-manager requirement from \<1.0.0,\>=0.5.0 to \>=0.5.0,\<2.0.0 [\#31](https://github.com/OpenVoiceOS/padacioso/pull/31) ([dependabot[bot]](https://github.com/apps/dependabot))
+
+## [1.0.0](https://github.com/OpenVoiceOS/padacioso/tree/1.0.0) (2024-10-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/1.0.0a1...1.0.0)
+
+**Merged pull requests:**
+
+- Release 1.0.0a1 [\#30](https://github.com/OpenVoiceOS/padacioso/pull/30) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [1.0.0a1](https://github.com/OpenVoiceOS/padacioso/tree/1.0.0a1) (2024-10-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.4...1.0.0a1)
+
+**Breaking changes:**
+
+- feat!:pipeline factory [\#29](https://github.com/OpenVoiceOS/padacioso/pull/29) ([JarbasAl](https://github.com/JarbasAl))
+
+## [0.2.4](https://github.com/OpenVoiceOS/padacioso/tree/0.2.4) (2024-10-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.4a1...0.2.4)
+
+**Merged pull requests:**
+
+- Release 0.2.4a1 [\#28](https://github.com/OpenVoiceOS/padacioso/pull/28) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [0.2.4a1](https://github.com/OpenVoiceOS/padacioso/tree/0.2.4a1) (2024-10-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.3a1...0.2.4a1)
+
+**Merged pull requests:**
+
+- fix:standardize\_lang [\#27](https://github.com/OpenVoiceOS/padacioso/pull/27) ([JarbasAl](https://github.com/JarbasAl))
+
+## [0.2.3a1](https://github.com/OpenVoiceOS/padacioso/tree/0.2.3a1) (2024-10-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.2...0.2.3a1)
+
+**Merged pull requests:**
+
+- move unittests to padacioso repo [\#25](https://github.com/OpenVoiceOS/padacioso/pull/25) ([JarbasAl](https://github.com/JarbasAl))
+
+## [0.2.2](https://github.com/OpenVoiceOS/padacioso/tree/0.2.2) (2024-10-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.2.2a2...0.2.2)
+
+**Merged pull requests:**
+
+- Release 0.2.2a2 [\#24](https://github.com/OpenVoiceOS/padacioso/pull/24) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [0.2.2a2](https://github.com/OpenVoiceOS/padacioso/tree/0.2.2a2) (2024-10-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.2a1...0.2.2a2)
+
+**Merged pull requests:**
+
+- feat:semver [\#23](https://github.com/OpenVoiceOS/padacioso/pull/23) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.2.2a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.2a1) (2024-07-20)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1...V0.2.2a1)
+
+**Implemented enhancements:**
+
+- feat/opm\_pipeline\_plugin [\#22](https://github.com/OpenVoiceOS/padacioso/pull/22) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.2.1](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1) (2023-12-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a9...V0.2.1)
+
+**Merged pull requests:**
+
+- 0.2.1 [\#21](https://github.com/OpenVoiceOS/padacioso/pull/21) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [V0.2.1a9](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a9) (2023-07-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a8...V0.2.1a9)
+
+**Fixed bugs:**
+
+- fix/fuzzy\_match scores [\#19](https://github.com/OpenVoiceOS/padacioso/pull/19) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.2.1a8](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a8) (2023-07-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a7...V0.2.1a8)
+
+**Implemented enhancements:**
+
+- feat/disambiguation [\#18](https://github.com/OpenVoiceOS/padacioso/pull/18) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.2.1a7](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a7) (2023-07-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a6...V0.2.1a7)
+
+**Implemented enhancements:**
+
+- feat/context + excluded keywords [\#17](https://github.com/OpenVoiceOS/padacioso/pull/17) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.2.1a6](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a6) (2023-06-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a5...V0.2.1a6)
+
+**Fixed bugs:**
+
+- remove spam LOG [\#14](https://github.com/OpenVoiceOS/padacioso/pull/14) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.2.1a5](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a5) (2023-05-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a4...V0.2.1a5)
+
+**Implemented enhancements:**
+
+- Adds support for Padatious `:0` syntax with unit tests [\#12](https://github.com/OpenVoiceOS/padacioso/pull/12) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.2.1a4](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a4) (2023-05-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a3...V0.2.1a4)
+
+## [V0.2.1a3](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a3) (2023-05-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a2...V0.2.1a3)
+
+## [V0.2.1a2](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a2) (2023-05-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a1...V0.2.1a2)
+
+**Merged pull requests:**
+
+- Optimize intent matching [\#10](https://github.com/OpenVoiceOS/padacioso/pull/10) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.2.1a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a1) (2023-05-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.0...V0.2.1a1)
+
+**Merged pull requests:**
+
+- add package data [\#9](https://github.com/OpenVoiceOS/padacioso/pull/9) ([emphasize](https://github.com/emphasize))
+
+## [V0.2.0](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.0) (2023-05-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.1.3a2...V0.2.0)
+
+**Merged pull requests:**
+
+- 0.2.0 [\#8](https://github.com/OpenVoiceOS/padacioso/pull/8) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [V0.1.3a2](https://github.com/OpenVoiceOS/padacioso/tree/V0.1.3a2) (2023-05-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.1.3a1...V0.1.3a2)
+
+**Merged pull requests:**
+
+- Optimization and Confidence Adjustments [\#7](https://github.com/OpenVoiceOS/padacioso/pull/7) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.1.3a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.1.3a1) (2023-05-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.1.1...V0.1.3a1)
+
+**Fixed bugs:**
+
+- Lowercase entity names in intent matches for backwards-compat. [\#5](https://github.com/OpenVoiceOS/padacioso/pull/5) ([NeonDaniel](https://github.com/NeonDaniel))
+- Normalize braces around entities for compat with existing intents [\#4](https://github.com/OpenVoiceOS/padacioso/pull/4) ([NeonDaniel](https://github.com/NeonDaniel))
+
+**Merged pull requests:**
+
+- Automate releases and Update tests [\#6](https://github.com/OpenVoiceOS/padacioso/pull/6) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [0.1.1](https://github.com/OpenVoiceOS/padacioso/tree/0.1.1) (2021-04-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.1.0...0.1.1)
+
+## [0.1.0](https://github.com/OpenVoiceOS/padacioso/tree/0.1.0) (2021-04-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/c962ff103520b15d1e75ec1e41fd95b236323b45...0.1.0)
 
 
 
