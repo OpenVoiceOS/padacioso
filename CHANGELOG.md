@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.1a1) (2026-09-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.0a1...2.4.1a1)
+
+**Merged pull requests:**
+
+- fix: detach\_skill removes intents by skill\_id prefix, not substring [\#102](https://github.com/OpenVoiceOS/padacioso/pull/102) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.4.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.0a1) (2026-09-18)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.3.6a2...2.4.0a1)
