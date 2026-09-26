@@ -4,7 +4,7 @@ from unittest.mock import patch
 from ovos_spec_tools import expand
 
 from padacioso import IntentContainer
-from padacioso.__init__ import MAX_EXPANSIONS, _normalize
+from padacioso.__init__ import MAX_EXPANSIONS, _fair_rations, _normalize
 
 
 def _long_line():
@@ -155,6 +155,149 @@ class TestEntityUniformSampling(unittest.TestCase):
         container = IntentContainer()
         container.add_entity("colors", [line])
         self.assertEqual(container.entity_samples["colors"], expansions)
+
+
+class TestTheBudgetIsAPool(unittest.TestCase):
+    """The cap is spent as ONE pool across an intent's lines.
+
+    It was ``max_expansions // len(lines)``, an equal ration whatever the
+    file used in total. Measured on ovos-skill-weather en-US at dev
+    e59b275e: 58 lines expanding to 5,593 in total, a ninth of the default
+    budget, and yet a ration of 50000 // 58 = 862 cost one 2,688-expansion
+    line 1,826 phrasings. Over that line's 1,344 slot-free phrasings only
+    525 matched. A phrasing dropped here can never match.
+    """
+
+    @staticmethod
+    def _fat_line():
+        # 4 * 2 * 7 * 12 * 2 * 2 = 2688, the shape of the weather line
+        q = "|".join(f"q{i}" for i in range(4))
+        w = "|".join(f"w{i}" for i in range(2))
+        d = "|".join(f"d{i}" for i in range(7))
+        h = "|".join(f"h{i}" for i in range(12))
+        m = "|".join(f"m{i}" for i in range(2))
+        n = "|".join(f"n{i}" for i in range(2))
+        return f"({q}) ({w}) ({d}) ({h}) ({m}) ({n})"
+
+    def test_a_file_under_the_budget_keeps_every_phrasing(self):
+        """The defect. 2688 in a file of 2688 + 57 short lines, budget 50000."""
+        fat = self._fat_line()
+        lines = [fat] + [f"short phrase {i}" for i in range(57)]
+        grand_total = sum(len(list(expand(line))) for line in lines)
+        self.assertLess(grand_total, MAX_EXPANSIONS,
+                        "the premise moved: this file must fit in the budget")
+
+        container = IntentContainer()
+        container.add_intent("weather", lines)
+        kept = set(container.intent_samples["weather"])
+
+        missing = [_normalize(e) for e in expand(fat)
+                   if _normalize(e) not in kept]
+        self.assertEqual([], missing,
+                         f"{len(missing)} phrasings dropped from a file at "
+                         f"{grand_total} of a {MAX_EXPANSIONS} budget")
+
+    def test_a_dropped_phrasing_can_never_match(self):
+        """Why it matters: the kept samples are the only regexes tested."""
+        fat = self._fat_line()
+        lines = [fat] + [f"short phrase {i}" for i in range(57)]
+        container = IntentContainer()
+        container.add_intent("weather", lines)
+
+        phrasings = [_normalize(e) for e in expand(fat)]
+        matched = sum(1 for p in phrasings
+                      if container.calc_intent(p)["name"] == "weather")
+        self.assertEqual(len(phrasings), matched,
+                         "a phrasing of a file well under the budget did not "
+                         "match its own intent")
+
+    def test_no_warning_when_the_total_fits(self):
+        """The message said 'exceeds max_expansions=50000' about a line of
+        2688, which reads as a file-size overflow and sent T-5120 looking for
+        one. A file inside the budget must say nothing at all."""
+        lines = [self._fat_line()] + [f"short phrase {i}" for i in range(57)]
+        container = IntentContainer()
+        with patch("padacioso.__init__.LOG.warning") as mock_warning:
+            container.add_intent("weather", lines)
+        self.assertEqual([], mock_warning.call_args_list)
+
+    def test_adding_a_line_does_not_shrink_another_line(self):
+        """The ration was a function of the neighbours, so the documented
+        workaround -- split the fat line -- got tighter as a locale grew and
+        could push a previously safe line over."""
+        fat = self._fat_line()
+        alone = _fair_rations([len(list(expand(fat)))], MAX_EXPANSIONS)[0]
+        for extra in (10, 57, 200):
+            totals = [len(list(expand(fat)))] + [4] * extra
+            self.assertEqual(
+                alone, _fair_rations(totals, MAX_EXPANSIONS)[0],
+                f"{extra} extra lines lowered the fat line's ration")
+
+    def test_a_real_overflow_is_still_bounded(self):
+        """Pooling must not remove the bound. The budget is why it exists."""
+        rations = _fair_rations([5000, 5000, 3], 1000)
+        self.assertEqual(1000, sum(rations))
+        self.assertEqual(3, rations[2], "the line that fits was not served whole")
+        self.assertEqual([498, 499], sorted(rations[:2])[:2])
+
+    def test_the_lines_that_fit_are_served_first(self):
+        """Max-min: a line never loses anything to a line that already fits."""
+        rations = _fair_rations([1, 1, 1, 10000], 100)
+        self.assertEqual([1, 1, 1, 97], rations)
+
+    def test_more_lines_than_budget_keeps_a_floor_of_one(self):
+        """Every template contributes a sample, as before. This is the only
+        case where the rations may add up to more than the budget."""
+        rations = _fair_rations([9] * 12, 5)
+        self.assertEqual([1] * 12, rations)
+
+    def test_the_warning_names_the_ration_it_applied(self):
+        """It said 'only 862 per overflowing line are kept' for a ration
+        nothing in the file asked for. It must report what it really did."""
+        fat = _long_line()  # 64000, a genuine overflow of the 50000 budget
+        container = IntentContainer()
+        with patch("padacioso.__init__.LOG.warning") as mock_warning:
+            container.add_intent("weather", [fat, "hello there"])
+        mock_warning.assert_called_once()
+        message = mock_warning.call_args[0][0]
+        self.assertIn("expands to 64001 samples", message)
+        self.assertIn("49999 kept", message)
+        self.assertNotIn("per overflowing line", message)
+
+
+class TestTheEntityPathPoolsToo(unittest.TestCase):
+    """The same accounting was written twice. A fix to one would leave the
+    other, and an entity value that is never retained can never validate a
+    match against that entity."""
+
+    @staticmethod
+    def _fat_line():
+        a = "|".join(f"a{i}" for i in range(14))
+        b = "|".join(f"b{i}" for i in range(14))
+        c = "|".join(f"c{i}" for i in range(14))
+        return f"({a}) ({b}) ({c})"   # 2744
+
+    def test_an_entity_under_the_budget_keeps_every_value(self):
+        fat = self._fat_line()
+        lines = [fat] + [f"value{i}" for i in range(57)]
+        grand_total = sum(len(list(expand(line))) for line in lines)
+        self.assertLess(grand_total, MAX_EXPANSIONS)
+
+        container = IntentContainer()
+        container.add_entity("colors", lines)
+        kept = container.entity_samples["colors"]
+
+        missing = [e for e in expand(fat) if e not in kept]
+        self.assertEqual([], missing,
+                         f"{len(missing)} values dropped from an entity at "
+                         f"{grand_total} of a {MAX_EXPANSIONS} budget")
+
+    def test_no_warning_when_the_entity_total_fits(self):
+        lines = [self._fat_line()] + [f"value{i}" for i in range(57)]
+        container = IntentContainer()
+        with patch("padacioso.__init__.LOG.warning") as mock_warning:
+            container.add_entity("colors", lines)
+        self.assertEqual([], mock_warning.call_args_list)
 
 
 if __name__ == "__main__":

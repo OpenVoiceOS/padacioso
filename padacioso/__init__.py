@@ -88,6 +88,97 @@ except ImportError:
 MAX_EXPANSIONS = 50000
 
 
+def _fair_rations(totals: List[int], budget: int) -> List[int]:
+    """How many expansions each line may keep, sharing ``budget`` as a POOL.
+
+    A line that fits inside its share keeps ALL of its expansions and hands
+    the remainder back to the lines that do not fit. So nothing is dropped
+    while the intent TOTAL is inside the budget, whatever the shape of the
+    individual lines, and when the total does exceed it the lines that
+    overflow divide what the fitting lines left over.
+
+    The rule was ``budget // len(lines)``: an equal ration whatever the file
+    used in total. Two things followed from it, both measured on
+    ovos-skill-weather en-US. A file at a ninth of the budget still truncated
+    its one fat line -- 58 lines expanding to 5,593 in total, a ration of
+    50000 // 58 = 862, and a line of 2,688 losing 1,826 phrasings that can
+    never match. And ADDING a line LOWERED the ration of every other line, so
+    the documented workaround, splitting the fat line, got tighter as a
+    locale grew and could push a previously safe line over.
+
+    This is the max-min fair share. Lines are served smallest first: each
+    takes its whole total if that fits in an equal share of what is left, and
+    otherwise takes that share. A line therefore never loses anything to a
+    line that already fits.
+
+    Args:
+        totals: how many expansions each line produces, in line order.
+        budget: the pool to divide, normally ``max_expansions``.
+
+    Returns:
+        One ration per line, in line order. Each is at least 1, so every
+        template contributes a sample even when there are more lines than
+        budget; that floor is the only case where the rations can add up to
+        more than ``budget``.
+    """
+    rations = [0] * len(totals)
+    remaining = budget
+    unsatisfied = len(totals)
+    for idx in sorted(range(len(totals)), key=lambda i: totals[i]):
+        share = max(1, remaining // unsatisfied)
+        rations[idx] = min(totals[idx], share)
+        remaining = max(0, remaining - rations[idx])
+        unsatisfied -= 1
+    return rations
+
+
+def _sample_within_budget(name: str, lines: List[str], budget: int):
+    """Expand ``lines``, keeping at most ``budget`` samples across them all.
+
+    Shared by :meth:`IntentContainer.add_intent` and
+    :meth:`IntentContainer.add_entity` so the two cannot drift: the same
+    accounting bug was written twice, and a fix applied to one would leave
+    the other.
+
+    A line that overflows its ration is sampled uniformly over its whole
+    range (reservoir sampling, seeded deterministically by name and line
+    index) rather than truncated at its first N, so a truncated line still
+    contributes coverage from end to end.
+
+    Args:
+        name: the intent or entity name, used to seed the sampling.
+        lines: the source templates.
+        budget: the pool, normally ``max_expansions``.
+
+    Returns:
+        ``(samples, overflowed, grand_total)``. ``samples`` are the raw
+        expansions, in line order, NOT normalized -- the intent path
+        normalizes them and the entity path does not. ``overflowed`` holds
+        ``(idx, line, total, ration)`` for each line that lost expansions.
+    """
+    totals = [sum(1 for _ in expand(line)) for line in lines]
+    rations = _fair_rations(totals, budget)
+    samples = []
+    overflowed = []
+    for idx, line in enumerate(lines):
+        total, ration = totals[idx], rations[idx]
+        if total <= ration:
+            samples.extend(expand(line))
+            continue
+        rng = random.Random(f"{name}:{idx}")
+        reservoir = []
+        for i, e in enumerate(expand(line)):
+            if i < ration:
+                reservoir.append(e)
+            else:
+                j = rng.randint(0, i)
+                if j < ration:
+                    reservoir[j] = e
+        samples.extend(reservoir)
+        overflowed.append((idx, line, total, ration))
+    return samples, overflowed, sum(totals)
+
+
 class IntentContainer:
     def __init__(self, fuzz=False, n_workers=4, max_expansions=MAX_EXPANSIONS):
         self.intent_samples, self.entity_samples = {}, {}
@@ -170,43 +261,27 @@ class IntentContainer:
         # engines own bounding unbounded template data: a bracket product
         # can explode combinatorially, and every expanded sample here costs
         # a resident regex string plus two matcher objects for the lifetime
-        # of the process. Spread the budget across the source lines so every
-        # template contributes, and sample each line's expansions uniformly
-        # (reservoir sampling, seeded deterministically by intent name and
-        # line index) rather than keeping only the first N, so a truncated
-        # line still contributes coverage from across its whole range.
-        expanded = []
+        # of the process. The budget is spent as ONE POOL across the source
+        # lines (see ``_fair_rations``): nothing is dropped while the intent
+        # total fits, and a line that does overflow is sampled uniformly over
+        # its whole range rather than truncated at its first N.
         budget = self.max_expansions
-        per_line = max(1, budget // max(1, len(lines)))
-        overflowed_lines = []
-        for idx, line in enumerate(lines):
-            rng = random.Random(f"{name}:{idx}")
-            reservoir = []
-            total = 0
-            for i, e in enumerate(expand(line)):
-                total = i + 1
-                if i < per_line:
-                    reservoir.append(e)
-                else:
-                    j = rng.randint(0, i)
-                    if j < per_line:
-                        reservoir[j] = e
-            if total > per_line:
-                overflowed_lines.append((idx, line, total))
-            expanded.extend(_normalize(e) for e in reservoir)
-        if overflowed_lines:
-            dropped = sum(total - per_line for _, _, total in overflowed_lines)
+        raw, overflowed, grand_total = _sample_within_budget(name, lines, budget)
+        expanded = [_normalize(e) for e in raw]
+        if overflowed:
+            dropped = sum(total - ration for _, _, total, ration in overflowed)
             details = "; ".join(
                 f"line {idx} ({line[:40]!r}) expands to {total}, "
-                f"{total - per_line} phrasings dropped"
-                for idx, line, total in overflowed_lines
+                f"{total - ration} phrasings dropped, {ration} kept"
+                for idx, line, total, ration in overflowed
             )
-            LOG.warning(f"intent {name!r} exceeds max_expansions={budget}: "
-                        f"{details}. {dropped} phrasings across this intent "
-                        f"will NOT match any utterance (only {per_line} "
-                        f"per overflowing line are kept, uniformly sampled). "
-                        f"Raise IntentContainer(max_expansions=...) if this "
-                        f"intent needs to keep more.")
+            LOG.warning(f"intent {name!r} expands to {grand_total} samples, "
+                        f"over max_expansions={budget}: {details}. {dropped} "
+                        f"phrasings across this intent will NOT match any "
+                        f"utterance (the lines that overflow share what the "
+                        f"rest of the intent left unused, and each is sampled "
+                        f"uniformly). Raise IntentContainer(max_expansions=...) "
+                        f"if this intent needs to keep more.")
         regexes = list(set(expanded))
         # literal patterns (no entities, no wildcards) first so they can
         # short-circuit before greedy entity patterns consume the query
@@ -256,44 +331,30 @@ class IntentContainer:
             LOG.debug(f"replacing existing entity: {name}")
             self.remove_entity(name)
         name = name.lower()
-        # same treatment as add_intent: spread the budget across the source
-        # lines and sample each line's expansions uniformly (reservoir
-        # sampling), rather than keeping only the first N overall — a hard
-        # truncation here silently drops whichever values expand last, and
-        # a value this entity never retains can never validate a match
-        # against it (see the entity_samples membership check in matches()).
-        expanded = []
+        # same treatment as add_intent, through the same helper so the two
+        # cannot drift: the budget is one pool across the source lines, and a
+        # line that overflows is sampled uniformly rather than truncated at
+        # its first N. A hard truncation here silently drops whichever values
+        # expand last, and a value this entity never retains can never
+        # validate a match against it (see the entity_samples membership
+        # check in matches()).
         budget = self.max_expansions
-        per_line = max(1, budget // max(1, len(lines)))
-        overflowed_lines = []
-        for idx, line in enumerate(lines):
-            rng = random.Random(f"{name}:{idx}")
-            reservoir = []
-            total = 0
-            for i, e in enumerate(expand(line)):
-                total = i + 1
-                if i < per_line:
-                    reservoir.append(e)
-                else:
-                    j = rng.randint(0, i)
-                    if j < per_line:
-                        reservoir[j] = e
-            if total > per_line:
-                overflowed_lines.append((idx, line, total))
-            expanded.extend(reservoir)
-        if overflowed_lines:
-            dropped = sum(total - per_line for _, _, total in overflowed_lines)
+        expanded, overflowed, grand_total = _sample_within_budget(
+            name, lines, budget)
+        if overflowed:
+            dropped = sum(total - ration for _, _, total, ration in overflowed)
             details = "; ".join(
                 f"line {idx} ({line[:40]!r}) expands to {total}, "
-                f"{total - per_line} values dropped"
-                for idx, line, total in overflowed_lines
+                f"{total - ration} values dropped, {ration} kept"
+                for idx, line, total, ration in overflowed
             )
-            LOG.warning(f"entity {name!r} exceeds max_expansions={budget}: "
-                        f"{details}. {dropped} values across this entity "
-                        f"will NEVER validate a match (only {per_line} per "
-                        f"overflowing line are kept, uniformly sampled). "
-                        f"Raise IntentContainer(max_expansions=...) if this "
-                        f"entity needs to keep more.")
+            LOG.warning(f"entity {name!r} expands to {grand_total} values, "
+                        f"over max_expansions={budget}: {details}. {dropped} "
+                        f"values across this entity will NEVER validate a "
+                        f"match (the lines that overflow share what the rest "
+                        f"of the entity left unused, and each is sampled "
+                        f"uniformly). Raise IntentContainer(max_expansions=...) "
+                        f"if this entity needs to keep more.")
         self.entity_samples[name] = set(expanded)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
