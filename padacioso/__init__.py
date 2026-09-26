@@ -7,6 +7,28 @@ import simplematch
 from ovos_spec_tools import expand, normalize_for_match
 
 
+def _normalize_tokens(text: str):
+    """Match-normalized tokens beside the surface tokens they came from.
+
+    The two lists are the same length and aligned by index: element *i* of the
+    first is what element *i* of the second folds to. A token that folds away
+    to nothing (bare punctuation) is dropped from BOTH, so the alignment
+    holds.
+
+    The alignment is what lets a captured slot value be reported as the words
+    the user actually said. OVOS-INTENT-1 §5.2 says the engine "captures a
+    span of the utterance", and §5.3 that a slot "still fills with the surface
+    words the user spoke". Matching wants the folded form; the value does not.
+    """
+    normed, surface = [], []
+    for token in text.split():
+        folded = token if token == "*" else normalize_for_match(token)
+        if folded:
+            normed.append(folded)
+            surface.append(token)
+    return normed, surface
+
+
 def _normalize(text: str) -> str:
     """Canonical OVOS-INTENT-1 match normalization.
 
@@ -19,10 +41,49 @@ def _normalize(text: str) -> str:
     present in a real utterance) so it is passed through verbatim rather than
     folded away as punctuation.
     """
-    normed = []
-    for token in text.split():
-        normed.append(token if token == "*" else normalize_for_match(token))
-    return " ".join(t for t in normed if t)
+    return " ".join(_normalize_tokens(text)[0])
+
+
+def _surface_value(value, normed, surface, cursor: int = 0):
+    """*value*, a span of the folded query, as the words the user spoke.
+
+    Returns ``(surface_value, next_cursor)``. The captured span is a run of
+    whole folded tokens, so its surface form is the run of surface tokens at
+    the same indices: the words the user said, with their diacritics and their
+    case.
+
+    The search starts at *cursor*, the token after the previous slot's span, so
+    two slots that fold to the same run each report their own words: in
+    ``"röd och rod"`` the first slot is ``röd`` and the second ``rod``, where a
+    search from zero would report ``röd`` twice. A value not found from the
+    cursor is searched for from the start, since nothing guarantees the
+    matcher hands its slots back in the order they appear.
+
+    A value that is no run of the folded query at all is returned unchanged:
+    the matcher supplied it from a registered entity or from session context
+    rather than cutting it out of the utterance, and it is not this function's
+    to rewrite.
+    """
+    if not isinstance(value, str) or not value:
+        return value, cursor
+    want = value.split()
+    if not want:
+        return value, cursor
+    last = len(normed) - len(want)
+    for first in (cursor, 0):
+        for start in range(first, last + 1):
+            if normed[start:start + len(want)] == want:
+                # the span exactly as the user said it, case included.
+                # OVOS-INTENT-1 §2 asks an upstream stage to lowercase the
+                # utterance before it reaches an engine, and in the fleet it
+                # does not: "lösche meinen Alarm für Zahnarzt" arrives with its
+                # capital. Folding it here destroyed a name the user gave, and a
+                # consumer that wants a folded form can fold what it is handed,
+                # while a consumer handed the folded form cannot recover the
+                # original (T-5676: an alert named Åsa was stored as asa).
+                restored = " ".join(surface[start:start + len(want)])
+                return restored, start + len(want)
+    return value, cursor
 
 
 def _wildcard_penalty(pattern: str) -> float:
@@ -531,7 +592,8 @@ class IntentContainer:
             regex candidates
         @return: yields dict intent matches
         """
-        query = _normalize(query)
+        normed_tokens, surface_tokens = _normalize_tokens(query)
+        query = " ".join(normed_tokens)
 
         # Lazy cache rebuild - only rebuild once after bulk registration
         # This avoids O(n²) scaling during registration (rebuild on every add)
@@ -547,6 +609,15 @@ class IntentContainer:
                 continue
             res = self._match(query, intent_name, regexes, slot_context)
             if res is not None:
+                # OVOS-INTENT-1 §5.2/§5.3: the slot carries the surface words,
+                # not the folded ones the match ran on
+                entities = res.get("entities")
+                if entities:
+                    restored, cursor = {}, 0
+                    for k, v in entities.items():
+                        restored[k], cursor = _surface_value(
+                            v, normed_tokens, surface_tokens, cursor)
+                    res["entities"] = restored
                 yield res
 
     def _tie_key(self, t: dict):
