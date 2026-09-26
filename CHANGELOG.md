@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.2a1) (2026-09-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.1a1...2.4.2a1)
+
+**Merged pull requests:**
+
+- fix: spend max\_expansions as one pool, not a ration per line [\#113](https://github.com/OpenVoiceOS/padacioso/pull/113) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.4.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.1a1) (2026-09-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.0a1...2.4.1a1)
