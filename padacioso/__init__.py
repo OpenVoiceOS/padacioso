@@ -19,10 +19,79 @@ def _normalize(text: str) -> str:
     present in a real utterance) so it is passed through verbatim rather than
     folded away as punctuation.
     """
-    normed = []
+    normed, _ = _normalize_aligned(text)
+    return " ".join(normed)
+
+
+def _normalize_aligned(text: str):
+    """``_normalize``'s tokens beside the tokens they were folded from.
+
+    Returns ``(normed_tokens, source_tokens)``, two lists of the same length
+    and the same order: ``normed_tokens[i]`` is the folded form of
+    ``source_tokens[i]``. A token that folds away to nothing is dropped from
+    both, so the alignment holds.
+
+    This is what lets a match keep the user's own text. Matching runs on the
+    folded query, because that is what OVOS-INTENT-1 §2 normalization is for,
+    but the value handed back for a slot must be the text the user said:
+    OVOS-INTENT-1 §5.6 says "``Match.slots[name]`` remains the **surface
+    string** in every case (OVOS-PIPELINE-1 §4.3)", and it ties a surface to
+    its utterance with "``utterance[start:end] == surface``". A folded
+    ``'rod'`` is not a span of ``'visa mig färgen röd'``, so a slot carrying
+    it satisfies neither.
+    """
+    normed, source = [], []
     for token in text.split():
-        normed.append(token if token == "*" else normalize_for_match(token))
-    return " ".join(t for t in normed if t)
+        folded = token if token == "*" else normalize_for_match(token)
+        if not folded:
+            continue
+        normed.append(folded)
+        source.append(token)
+    return normed, source
+
+
+def _spoken_span(value, normed_tokens, source_tokens):
+    """The user's own text for a slot value captured off the folded query.
+
+    ``value`` is a run of folded tokens. The same run is located in
+    ``normed_tokens`` and the matching ``source_tokens`` are returned joined,
+    which is the span of the utterance the value was read from.
+
+    Two cases return ``value`` unchanged, and both are honest rather than
+    silent guesses:
+
+    - a capture that is not whole tokens (a pattern such as ``color{x}`` can
+      bind part of one), because no span of source tokens is the right
+      answer for it;
+    - a value that is not in the query at all, which is what a live context
+      candidate substituted under OVOS-CONTEXT-1 §7 looks like. That value
+      came from the session, not from the utterance, and must not be
+      rewritten to look as though it did.
+
+    A folded run that occurs more than once takes the FIRST occurrence. The
+    occurrences differ only in text the fold removed, and nothing in the
+    match says which one was bound.
+    """
+    if not isinstance(value, str):
+        return value
+    wanted = value.split()
+    if not wanted:
+        return value
+    width = len(wanted)
+    for start in range(len(normed_tokens) - width + 1):
+        if normed_tokens[start:start + width] == wanted:
+            return " ".join(source_tokens[start:start + width])
+    return value
+
+
+def _restore_spoken_slots(entities, normed_tokens, source_tokens):
+    """Rewrite every slot value to the span of the utterance it was read
+    from. Returns the same mapping, edited in place."""
+    if not entities:
+        return entities
+    for name, value in list(entities.items()):
+        entities[name] = _spoken_span(value, normed_tokens, source_tokens)
+    return entities
 
 
 def _wildcard_penalty(pattern: str) -> float:
@@ -431,7 +500,25 @@ class IntentContainer:
             return True
         return False
 
-    def _match(self, query, intent_name, regexes, slot_context=None):
+    def _match(self, query, intent_name, regexes, slot_context=None,
+               spoken=None):
+        """Match ``query`` against one intent's regexes.
+
+        ``spoken`` is ``_normalize_aligned``'s ``(normed, source)`` pair for
+        the utterance this query was folded from. When it is given, every
+        captured slot is rewritten to the span of the utterance it was read
+        from BEFORE the entity-membership check below, so the check compares
+        the user's own text against samples the skill declared in the same
+        form. Folded text failed that check and took a 0.1 penalty for a
+        correct binding.
+        """
+        normed_tokens, source_tokens = spoken or (None, None)
+
+        def keep_spoken(found):
+            if found is not None and normed_tokens is not None:
+                _restore_spoken_slots(found, normed_tokens, source_tokens)
+            return found
+
         query_has_upper = query != query.lower()
         for r in regexes:
             penalty = self._regex_penalty.get(r, 0.0)
@@ -445,7 +532,7 @@ class IntentContainer:
                         _patch_nongreedy(cm)
                     self._cased_matchers[r] = cm
                     self._regex_penalty.setdefault(r, _wildcard_penalty(r))
-                entities = self._cased_matchers[r].match(query)
+                entities = keep_spoken(self._cased_matchers[r].match(query))
 
             if entities is not None:
                 for k, v in entities.items():
@@ -466,7 +553,7 @@ class IntentContainer:
                     _patch_nongreedy(um)
                 self._uncased_matchers[r] = um
                 self._regex_penalty.setdefault(r, _wildcard_penalty(r))
-            entities = self._uncased_matchers[r].match(query)
+            entities = keep_spoken(self._uncased_matchers[r].match(query))
             if entities is not None:
                 # query_has_upper + uncased match = genuine case mismatch
                 entity_penalty = 0.04 if not query_has_upper else 0.05
@@ -500,6 +587,7 @@ class IntentContainer:
                 for s in variants:
                     entities = self._fuzzy_score(query, s, 0.25)
                     if entities:
+                        keep_spoken(entities.get("entities"))
                         entities["name"] = intent_name
                         return entities
 
@@ -531,7 +619,8 @@ class IntentContainer:
             regex candidates
         @return: yields dict intent matches
         """
-        query = _normalize(query)
+        normed_tokens, source_tokens = _normalize_aligned(query)
+        query = " ".join(normed_tokens)
 
         # Lazy cache rebuild - only rebuild once after bulk registration
         # This avoids O(n²) scaling during registration (rebuild on every add)
@@ -545,7 +634,8 @@ class IntentContainer:
         for intent_name, regexes in self._intent_list:
             if intent_name in excluded_intents:
                 continue
-            res = self._match(query, intent_name, regexes, slot_context)
+            res = self._match(query, intent_name, regexes, slot_context,
+                              spoken=(normed_tokens, source_tokens))
             if res is not None:
                 yield res
 

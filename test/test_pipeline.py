@@ -40,8 +40,9 @@ class UtteranceIntentMatchingTest(unittest.TestCase):
         # regex match
         intent = intent_service.calc_intent("tell me about Mycroft", "en-US")
         self.assertEqual(intent.name, "test2")
-        # entity values are normalized (lowercased) for matching per OVOS-INTENT-1
-        self.assertEqual(intent.matches, {'thing': 'mycroft'})
+        # the query is folded for matching, and the slot keeps the span of
+        # the utterance it was read from (OVOS-INTENT-1 §5.6)
+        self.assertEqual(intent.matches, {'thing': 'Mycroft'})
 
         # fuzzy regex match - failure case
         utterance = "tell me everything about Mycroft"
@@ -60,8 +61,9 @@ class UtteranceIntentMatchingTest(unittest.TestCase):
         utterance = "tell me everything about Mycroft"
         intent = intent_service.calc_intent(utterance, "en-US")
         self.assertEqual(intent.name, "test2")
-        # entity values are normalized (lowercased) for matching per OVOS-INTENT-1
-        self.assertEqual(intent.matches, {'thing': 'mycroft'})
+        # the query is folded for matching, and the slot keeps the span of
+        # the utterance it was read from (OVOS-INTENT-1 §5.6)
+        self.assertEqual(intent.matches, {'thing': 'Mycroft'})
         self.assertEqual(intent.sent, utterance)
         self.assertTrue(intent.conf <= 0.8)
 

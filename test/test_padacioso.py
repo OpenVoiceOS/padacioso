@@ -89,10 +89,13 @@ class TestIntentContainer(unittest.TestCase):
         intent = container.calc_intent("this is a test")
         self.assertEqual(intent["name"], "test")
 
-        # regex match (entity value is normalized for matching)
+        # regex match. Matching runs on the folded query, but the slot keeps
+        # the span of the utterance it was read from: OVOS-INTENT-1 §5.6,
+        # "Match.slots[name] remains the surface string in every case", tied
+        # to the utterance by "utterance[start:end] == surface".
         intent = container.calc_intent("tell me about Mycroft")
         self.assertEqual(intent["name"], "test2")
-        self.assertEqual(intent["entities"], {'thing': 'mycroft'})
+        self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
 
         # fuzzy match - failure case (no fuzz)
         intent = container.calc_intent("this is test")
@@ -116,16 +119,16 @@ class TestIntentContainer(unittest.TestCase):
         # regex match
         intent = container.calc_intent("tell me about Mycroft")
         self.assertEqual(intent["name"], "test2")
-        self.assertEqual(intent["entities"], {'thing': 'mycroft'})
+        self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
 
         # fuzzy match
         intent = container.calc_intent("this is test")
         self.assertEqual(intent["name"], "test")
 
-        # fuzzy regex match
+        # fuzzy regex match: the same rule holds on the fuzzy path
         intent = container.calc_intent("tell me everything about Mycroft")
         self.assertEqual(intent["name"], "test2")
-        self.assertEqual(intent["entities"], {'thing': 'mycroft'})
+        self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
 
     def test_add_remove_intent(self):
         container = IntentContainer()
