@@ -89,10 +89,14 @@ class TestIntentContainer(unittest.TestCase):
         intent = container.calc_intent("this is a test")
         self.assertEqual(intent["name"], "test")
 
-        # regex match (entity value is normalized for matching)
+        # the MATCH is normalized; the captured value is the span the user
+        # said. OVOS-INTENT-1 §5.2 "the engine captures a span of the
+        # utterance" and §5.3 "the slot itself still fills with the surface
+        # words the user spoke". §2's normalization governs the text presented
+        # for matching, not the value handed back.
         intent = container.calc_intent("tell me about Mycroft")
         self.assertEqual(intent["name"], "test2")
-        self.assertEqual(intent["entities"], {'thing': 'mycroft'})
+        self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
 
         # fuzzy match - failure case (no fuzz)
         intent = container.calc_intent("this is test")
@@ -113,19 +117,21 @@ class TestIntentContainer(unittest.TestCase):
         intent = container.calc_intent("this is a test")
         self.assertEqual(intent["name"], "test")
 
-        # regex match
+        # regex match: the captured value is the user's own word
+        # (OVOS-INTENT-1 §5.2, §5.3)
         intent = container.calc_intent("tell me about Mycroft")
         self.assertEqual(intent["name"], "test2")
-        self.assertEqual(intent["entities"], {'thing': 'mycroft'})
+        self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
 
         # fuzzy match
         intent = container.calc_intent("this is test")
         self.assertEqual(intent["name"], "test")
 
-        # fuzzy regex match
+        # fuzzy regex match: the span still comes out of the utterance the user
+        # said, even though the pattern that matched was a fuzzed variant
         intent = container.calc_intent("tell me everything about Mycroft")
         self.assertEqual(intent["name"], "test2")
-        self.assertEqual(intent["entities"], {'thing': 'mycroft'})
+        self.assertEqual(intent["entities"], {'thing': 'Mycroft'})
 
     def test_add_remove_intent(self):
         container = IntentContainer()
