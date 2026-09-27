@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.3a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.3a1) (2026-09-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.2a1...2.4.3a1)
+
+**Merged pull requests:**
+
+- fix: a captured slot carries the words the user said [\#115](https://github.com/OpenVoiceOS/padacioso/pull/115) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.4.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.2a1) (2026-09-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.1a1...2.4.2a1)
@@ -436,11 +444,6 @@
 ## [V0.1.3a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.1.3a1) (2023-05-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.1.1...V0.1.3a1)
-
-**Fixed bugs:**
-
-- Lowercase entity names in intent matches for backwards-compat. [\#5](https://github.com/OpenVoiceOS/padacioso/pull/5) ([NeonDaniel](https://github.com/NeonDaniel))
-- Normalize braces around entities for compat with existing intents [\#4](https://github.com/OpenVoiceOS/padacioso/pull/4) ([NeonDaniel](https://github.com/NeonDaniel))
 
 **Merged pull requests:**
 
