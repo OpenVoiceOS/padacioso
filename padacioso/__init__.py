@@ -1,32 +1,102 @@
 import random
 import re
-from typing import List, Iterator, Optional
+from functools import lru_cache
+from typing import List, Iterator, Optional, Tuple
 
 import simplematch
 
 from ovos_spec_tools import expand, normalize_for_match
 
 
+@lru_cache(maxsize=None)
+def _separates_words(char: str) -> bool:
+    """True if *char* is a mark the fold turns into a word boundary.
+
+    Asked of :func:`ovos_spec_tools.normalize_for_match` rather than decided
+    here, so this file never holds a second copy of the rule: a character
+    placed between two letters either leaves one word or leaves two, and the
+    fold itself is the only thing that knows which. A separating mark (``,``,
+    ``،``, ``。``) gives ``"a b"``; a mark the fold deletes (an apostrophe, an
+    interpunct, ``_``) gives ``"ab"``; a letter gives neither.
+    """
+    return normalize_for_match(f"a{char}b") == "a b"
+
+
+def _word_spans(token: str, offset: int = 0) -> Iterator[Tuple[int, int]]:
+    """Spans of one whitespace token's words, where the fold puts a boundary.
+
+    Yields ``(start, end)`` into the text the token was cut from, *offset*
+    being where the token sits there. ``"Åsa,please"`` is two words to the
+    fold, so it must be two words here. Runs of separators collapse and
+    leading or trailing ones drop, which is what the fold's own whitespace
+    collapse does.
+
+    A ``{slot}`` span is atomic, exactly as `normalize_for_match` keeps it:
+    its braces are `Ps`/`Pe` and would otherwise separate, which would reduce
+    ``"{name}"`` to ``"name"`` and silently turn the marker into a literal
+    word, so the template would stop capturing anything at all.
+    """
+    for match in re.finditer(r"\{[^{}]*\}|[^{}]+", token):
+        part, base = match.group(), offset + match.start()
+        if part.startswith("{"):
+            yield base, base + len(part)
+            continue
+        start = None
+        for i, char in enumerate(part):
+            if _separates_words(char):
+                if start is not None:
+                    yield base + start, base + i
+                    start = None
+            elif start is None:
+                start = i
+        if start is not None:
+            yield base + start, base + len(part)
+
+
 def _normalize_tokens(text: str):
-    """Match-normalized tokens beside the surface tokens they came from.
+    """Match-normalized words beside the spans of *text* they were read from.
 
     The two lists are the same length and aligned by index: element *i* of the
-    first is what element *i* of the second folds to. A token that folds away
-    to nothing (bare punctuation) is dropped from BOTH, so the alignment
-    holds.
+    first is what the text at span *i* folds to. A word that folds away to
+    nothing (bare punctuation) is dropped from BOTH, so the alignment holds.
 
     The alignment is what lets a captured slot value be reported as the words
     the user actually said. OVOS-INTENT-1 §5.2 says the engine "captures a
     span of the utterance", and §5.3 that a slot "still fills with the surface
     words the user spoke". Matching wants the folded form; the value does not.
+
+    One whitespace token is not always one word. OVOS-INTENT-2 §4.3 counts
+    whole words, so `normalize_for_match` replaces a word-separating mark with
+    a space (ovos-spec-tools, from architecture's T-7149): ``"Åsa,please"``
+    folds to ``"asa please"``. Pairing that by index against the single
+    whitespace token put a two-word string in a list whose reader assumes one
+    word per entry, and `_surface_value` then failed to find the span and
+    handed back the folded form - ``"asa please"`` for a name the user gave as
+    ``"Åsa"``, which is the harm T-5676 fixed. So a token is cut on the same
+    boundaries first, and each word is folded on its own. Every entry is one
+    word by construction, whatever the fold does.
+
+    Spans rather than the words themselves, because `_surface_value` reports
+    the utterance text between the first and last word of a captured run
+    (§5.6: ``utterance[start:end] == surface``). Rejoining words with single
+    spaces drops whatever stood between them, which turns a date the user
+    gave as ``"March 3, 2027"`` into ``"March 3 2027"`` - no longer a span of
+    the utterance, so a consumer looking a typed slot up by surface equality
+    finds nothing.
     """
-    normed, surface = [], []
-    for token in text.split():
-        folded = token if token == "*" else normalize_for_match(token)
-        if folded:
-            normed.append(folded)
-            surface.append(token)
-    return normed, surface
+    normed, spans = [], []
+    for match in re.finditer(r"\S+", text):
+        if match.group() == "*":
+            # structural wildcard, consumed by simplematch and never spoken
+            normed.append(match.group())
+            spans.append((match.start(), match.end()))
+            continue
+        for start, end in _word_spans(match.group(), match.start()):
+            folded = normalize_for_match(text[start:end])
+            if folded:
+                normed.append(folded)
+                spans.append((start, end))
+    return normed, spans
 
 
 def _normalize(text: str) -> str:
@@ -44,13 +114,13 @@ def _normalize(text: str) -> str:
     return " ".join(_normalize_tokens(text)[0])
 
 
-def _surface_value(value, normed, surface, cursor: int = 0):
+def _surface_value(value, normed, spans, text, cursor: int = 0):
     """*value*, a span of the folded query, as the words the user spoke.
 
     Returns ``(surface_value, next_cursor)``. The captured span is a run of
-    whole folded tokens, so its surface form is the run of surface tokens at
-    the same indices: the words the user said, with their diacritics and their
-    case.
+    whole folded words, so its surface form is *text* between the start of the
+    run's first word and the end of its last: the words the user said, with
+    their diacritics, their case and whatever stood between them.
 
     The search starts at *cursor*, the token after the previous slot's span, so
     two slots that fold to the same run each report their own words: in
@@ -73,7 +143,8 @@ def _surface_value(value, normed, surface, cursor: int = 0):
     for first in (cursor, 0):
         for start in range(first, last + 1):
             if normed[start:start + len(want)] == want:
-                # the span exactly as the user said it, case included.
+                # the span exactly as the user said it, case included, and a
+                # span of the utterance by construction (§5.6).
                 # OVOS-INTENT-1 §2 asks an upstream stage to lowercase the
                 # utterance before it reaches an engine, and in the fleet it
                 # does not: "lösche meinen Alarm für Zahnarzt" arrives with its
@@ -81,8 +152,8 @@ def _surface_value(value, normed, surface, cursor: int = 0):
                 # consumer that wants a folded form can fold what it is handed,
                 # while a consumer handed the folded form cannot recover the
                 # original (T-5676: an alert named Åsa was stored as asa).
-                restored = " ".join(surface[start:start + len(want)])
-                return restored, start + len(want)
+                last_word = start + len(want) - 1
+                return text[spans[start][0]:spans[last_word][1]], last_word + 1
     return value, cursor
 
 
@@ -592,7 +663,8 @@ class IntentContainer:
             regex candidates
         @return: yields dict intent matches
         """
-        normed_tokens, surface_tokens = _normalize_tokens(query)
+        utterance = query
+        normed_tokens, word_spans = _normalize_tokens(utterance)
         query = " ".join(normed_tokens)
 
         # Lazy cache rebuild - only rebuild once after bulk registration
@@ -616,7 +688,7 @@ class IntentContainer:
                     restored, cursor = {}, 0
                     for k, v in entities.items():
                         restored[k], cursor = _surface_value(
-                            v, normed_tokens, surface_tokens, cursor)
+                            v, normed_tokens, word_spans, utterance, cursor)
                     res["entities"] = restored
                 yield res
 
