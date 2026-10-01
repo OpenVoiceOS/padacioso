@@ -388,10 +388,13 @@ class IntentContainer:
         @param name: name of entity to add
         @param lines: list of entity examples
         """
+        # folded before the replacement test, because that test must read the
+        # same spelling the store below uses: "Foo" replacing a stored "foo"
+        # has to reach remove_entity, not only the assignment.
+        name = name.lower()
         if name in self.entity_samples:
             LOG.debug(f"replacing existing entity: {name}")
             self.remove_entity(name)
-        name = name.lower()
         # same treatment as add_intent, through the same helper so the two
         # cannot drift: the budget is one pool across the source lines, and a
         # line that overflows is sampled uniformly rather than truncated at
@@ -461,6 +464,48 @@ class IntentContainer:
                 excluded_intents.append(intent_name)
         return excluded_intents
 
+    def _entity_key(self, intent_name: str, slot: str) -> Optional[str]:
+        """The ``entity_samples`` key that holds slot *slot*'s value set.
+
+        A template's slot name is bare (``{media_type}``), but the pipeline
+        plugin registers a skill's ``.entity`` list under
+        ``<skill_id>:<entity_name>``, because two skills may both declare a
+        ``media_type`` and one must not answer for the other. So the bare slot
+        name is looked up under the owning intent's namespace first, and only
+        then as itself.
+
+        The bare fallback is not legacy tolerance: a container used directly,
+        without the plugin, registers entities under the plain name, and so
+        does any caller that means one value set for every skill.
+
+        The composed key is lowercased, because ``add_entity`` lowercases the
+        name it stores under and ``add_intent`` does not. A skill id with an
+        uppercase letter in it otherwise composes a key that no stored key can
+        equal, and the slot reads as unregistered however the list was
+        registered. The slot name needs no such repair: ``add_intent`` expands
+        each sample through ``ovos_spec_tools.expansion.expand``, which refuses
+        a slot name outside lowercase letters, digits and underscores, and
+        ``_slot_names`` folds the name again to line up with the match keys. The
+        fold on the bare candidate is therefore defence for a direct caller of
+        this method, not a fix for a miss any template can reach.
+
+        One limit: two skill ids that differ only in case compose a single key
+        here, and ``add_entity`` already stores them as a single key, so this
+        namespace separates skill ids that differ by more than case.
+
+        Returns ``None`` when no value set is registered for the slot, which is
+        the "unregistered" case the caller penalizes more lightly than a value
+        that is registered and does not match.
+        """
+        if intent_name and ":" in intent_name:
+            namespaced = f"{intent_name.split(':', 1)[0]}:{slot}".lower()
+            if namespaced in self.entity_samples:
+                return namespaced
+        bare = slot.lower()
+        if bare in self.entity_samples:
+            return bare
+        return None
+
     def _entity_member(self, k: str, value) -> bool:
         """Case-insensitive membership of ``value`` in entity ``k``'s samples.
 
@@ -473,7 +518,8 @@ class IntentContainer:
         """
         return str(value).lower() in {s.lower() for s in self.entity_samples[k]}
 
-    def _apply_slot_candidate(self, entities, k, v, slot_context, intent_name):
+    def _apply_slot_candidate(self, entities, k, v, slot_context, intent_name,
+                              entity_key):
         """OVOS-CONTEXT-1 §7 — offer a live context value as a candidate for
         slot ``k`` BEFORE the entity-membership penalty below is applied.
 
@@ -487,7 +533,7 @@ class IntentContainer:
         """
         owner_id = intent_name.split(":")[0]
         candidate = slot_context.get((owner_id, k)) if slot_context else None
-        if candidate is not None and self._entity_member(k, candidate):
+        if candidate is not None and self._entity_member(entity_key, candidate):
             entities[k] = candidate
             return True
         return False
@@ -510,11 +556,13 @@ class IntentContainer:
 
             if entities is not None:
                 for k, v in entities.items():
-                    if k not in self.entity_samples:
+                    entity_key = self._entity_key(intent_name, k)
+                    if entity_key is None:
                         # penalize unregistered entities
                         penalty += 0.04
-                    elif not self._entity_member(k, v):
-                        if self._apply_slot_candidate(entities, k, v, slot_context, intent_name):
+                    elif not self._entity_member(entity_key, v):
+                        if self._apply_slot_candidate(entities, k, v, slot_context,
+                                                      intent_name, entity_key):
                             continue
                         # penalize parsed entity value not in samples
                         penalty += 0.1
@@ -534,11 +582,13 @@ class IntentContainer:
                 if query_has_upper:
                     penalty += 0.05
                 for k, v in entities.items():
-                    if k not in self.entity_samples:
+                    entity_key = self._entity_key(intent_name, k)
+                    if entity_key is None:
                         # penalize unregistered entities
                         penalty += entity_penalty
-                    elif not self._entity_member(k, v):
-                        if self._apply_slot_candidate(entities, k, v, slot_context, intent_name):
+                    elif not self._entity_member(entity_key, v):
+                        if self._apply_slot_candidate(entities, k, v, slot_context,
+                                                      intent_name, entity_key):
                             continue
                         # penalize parsed entity value not in samples
                         penalty += 0.1
