@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.4a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.4a1) (2026-10-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.3a1...2.4.4a1)
+
+**Merged pull requests:**
+
+- fix: fold blacklist lines like the utterance [\#120](https://github.com/OpenVoiceOS/padacioso/pull/120) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.4.3a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.3a1) (2026-09-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.2a1...2.4.3a1)
@@ -437,17 +445,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.1.3a1...V0.1.3a2)
 
-**Merged pull requests:**
-
-- Optimization and Confidence Adjustments [\#7](https://github.com/OpenVoiceOS/padacioso/pull/7) ([NeonDaniel](https://github.com/NeonDaniel))
-
 ## [V0.1.3a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.1.3a1) (2023-05-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/0.1.1...V0.1.3a1)
-
-**Merged pull requests:**
-
-- Automate releases and Update tests [\#6](https://github.com/OpenVoiceOS/padacioso/pull/6) ([NeonDaniel](https://github.com/NeonDaniel))
 
 ## [0.1.1](https://github.com/OpenVoiceOS/padacioso/tree/0.1.1) (2021-04-28)
 
