@@ -440,13 +440,12 @@ class IntentContainer:
     def _filter(self, query: str):
         # filter intents based on context/excluded keywords
         excluded_intents = []
-        q_lower = query.lower()
-        query_words = set(q_lower.split())
+        query_words = set(query.split())
         for intent_name, samples in self.excluded_keywords.items():
-            def _kw_hit(kw, _qw=query_words, _ql=q_lower):
+            def _kw_hit(kw, _qw=query_words, _q=query):
                 if ' ' not in kw:
-                    return kw.lower() in _qw
-                return bool(re.search(r'\b' + re.escape(kw.lower()) + r'\b', _ql))
+                    return kw in _qw
+                return bool(re.search(r'\b' + re.escape(kw) + r'\b', _q))
             if any(_kw_hit(s) for s in samples):
                 excluded_intents.append(intent_name)
         for intent_name, contexts in self.required_contexts.items():
@@ -693,10 +692,8 @@ class IntentContainer:
         return match
 
     def exclude_keywords(self, intent_name, samples):
-        if intent_name not in self.excluded_keywords:
-            self.excluded_keywords[intent_name] = samples
-        else:
-            self.excluded_keywords[intent_name] += samples
+        folded = [kw for kw in map(_normalize, samples) if kw]
+        self.excluded_keywords.setdefault(intent_name, []).extend(folded)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
     def set_context(self, intent_name, context_name, context_val=None):

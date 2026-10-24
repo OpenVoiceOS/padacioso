@@ -20,7 +20,7 @@ from ovos_utils import flatten_list
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG, log_deprecation
 
-from padacioso import IntentContainer as FallbackIntentContainer
+from padacioso import IntentContainer as FallbackIntentContainer, _normalize
 
 
 class PadaciosoIntent:
@@ -178,9 +178,9 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         happens to contain a blacklisted word ("the it crowd" vs ["it"],
         "her majesty" vs ["her"]) is a legitimate binding and must survive.
         """
-        v_words = value.lower().split()
+        v_words = _normalize(value).split()
         for bad in blacklist:
-            if v_words == str(bad).lower().split():
+            if v_words == _normalize(str(bad)).split():
                 return True
         return False
 
