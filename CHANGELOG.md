@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.5.0a1) (2026-10-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.5a1...2.5.0a1)
+
+**Merged pull requests:**
+
+- feat: reject a template intent when none of its required keywords occurs [\#124](https://github.com/OpenVoiceOS/padacioso/pull/124) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.4.5a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.5a1) (2026-10-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.4a1...2.4.5a1)
@@ -413,10 +421,6 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a4...V0.2.1a5)
 
-**Implemented enhancements:**
-
-- Adds support for Padatious `:0` syntax with unit tests [\#12](https://github.com/OpenVoiceOS/padacioso/pull/12) ([NeonDaniel](https://github.com/NeonDaniel))
-
 ## [V0.2.1a4](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a4) (2023-05-12)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a3...V0.2.1a4)
@@ -428,10 +432,6 @@
 ## [V0.2.1a2](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a2) (2023-05-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a1...V0.2.1a2)
-
-**Merged pull requests:**
-
-- Optimize intent matching [\#10](https://github.com/OpenVoiceOS/padacioso/pull/10) ([NeonDaniel](https://github.com/NeonDaniel))
 
 ## [V0.2.1a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a1) (2023-05-06)
 
