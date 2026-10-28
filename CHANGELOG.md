@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.4a1](https://github.com/OpenVoiceOS/padacioso/tree/2.5.4a1) (2026-10-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.5.3a1...2.5.4a1)
+
+**Merged pull requests:**
+
+- fix: a typed slot binds only words a listed span of its type covers [\#127](https://github.com/OpenVoiceOS/padacioso/pull/127) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.5.3a1](https://github.com/OpenVoiceOS/padacioso/tree/2.5.3a1) (2026-10-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.5.2a1...2.5.3a1)
@@ -389,17 +397,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.2a1...0.2.2a2)
 
-**Merged pull requests:**
-
-- feat:semver [\#23](https://github.com/OpenVoiceOS/padacioso/pull/23) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [V0.2.2a1](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.2a1) (2024-07-20)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1...V0.2.2a1)
-
-**Implemented enhancements:**
-
-- feat/opm\_pipeline\_plugin [\#22](https://github.com/OpenVoiceOS/padacioso/pull/22) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [V0.2.1](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1) (2023-12-29)
 
