@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.3a1](https://github.com/OpenVoiceOS/padacioso/tree/2.5.3a1) (2026-10-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.5.2a1...2.5.3a1)
+
+**Merged pull requests:**
+
+- fix: a slot marker inside a word folds as the utterance's word folds [\#129](https://github.com/OpenVoiceOS/padacioso/pull/129) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.5.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.5.2a1) (2026-10-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.5.1a1...2.5.2a1)
@@ -396,10 +404,6 @@
 ## [V0.2.1](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1) (2023-12-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a9...V0.2.1)
-
-**Merged pull requests:**
-
-- 0.2.1 [\#21](https://github.com/OpenVoiceOS/padacioso/pull/21) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [V0.2.1a9](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a9) (2023-07-13)
 
