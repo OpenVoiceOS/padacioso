@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.5.1a1) (2026-10-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.5.0a1...2.5.1a1)
+
+**Merged pull requests:**
+
+- fix: split a folded token so a slot value keeps the words the user said [\#118](https://github.com/OpenVoiceOS/padacioso/pull/118) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.5.0a1](https://github.com/OpenVoiceOS/padacioso/tree/2.5.0a1) (2026-10-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.5a1...2.5.0a1)
@@ -405,17 +413,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a6...V0.2.1a7)
 
-**Implemented enhancements:**
-
-- feat/context + excluded keywords [\#17](https://github.com/OpenVoiceOS/padacioso/pull/17) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [V0.2.1a6](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a6) (2023-06-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a5...V0.2.1a6)
-
-**Fixed bugs:**
-
-- remove spam LOG [\#14](https://github.com/OpenVoiceOS/padacioso/pull/14) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [V0.2.1a5](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a5) (2023-05-16)
 
