@@ -1,7 +1,7 @@
 import random
 import re
 from functools import lru_cache
-from typing import List, Iterator, Optional, Tuple
+from typing import Dict, List, Iterator, Optional, Tuple
 
 import simplematch
 
@@ -155,6 +155,41 @@ def _surface_value(value, normed, spans, text, cursor: int = 0):
                 last_word = start + len(want) - 1
                 return text[spans[start][0]:spans[last_word][1]], last_word + 1
     return value, cursor
+
+
+def _typed_words(typed_spans, spans) -> Dict[str, List[frozenset]]:
+    """The folded words each listed typed span covers, by type.
+
+    *typed_spans* holds ``(type, start, end)`` character spans of the query,
+    read from the OVOS-INTENT-1 §5.6 typed-slot map; *spans* are the query's
+    word spans from `_normalize_tokens`. Each listed span becomes the set of
+    word indices it touches, so a slot value captured from the folded query
+    can be compared with it.
+    """
+    words: Dict[str, List[frozenset]] = {}
+    for type_name, start, end in typed_spans:
+        covered = frozenset(i for i, (s, e) in enumerate(spans) if s < end and start < e)
+        if covered:
+            words.setdefault(type_name, []).append(covered)
+    return words
+
+
+def _shares_a_word(value, normed, listed) -> bool:
+    """Whether *value* shares a word with one of the *listed* typed spans.
+
+    *value* is a run of the folded query *normed*; every place it occurs is
+    tried, since the matcher does not say which one it captured. A value that
+    is no run of the query cannot be placed, and is not rejected for that.
+    """
+    want = str(value).split()
+    located = False
+    for start in range(len(normed) - len(want) + 1):
+        if normed[start:start + len(want)] == want:
+            located = True
+            run = set(range(start, start + len(want)))
+            if any(run & covered for covered in listed):
+                return True
+    return not located
 
 
 def _wildcard_penalty(pattern: str) -> float:
@@ -327,6 +362,10 @@ class IntentContainer:
         # Consumed by the pipeline to offer live context entries as slot
         # candidates for slots the utterance itself left unresolved.
         self.intent_slots = {}
+        # OVOS-INTENT-1 §5.6 — per-intent ``slot -> type`` of the typed
+        # placeholders. The template expansion strips ``{type:name}`` to
+        # ``{name}``, so the pipeline records the types here.
+        self.slot_types = {}
         # self.intents, self.entities = {}, {}
         self.fuzz = fuzz
         self.workers = n_workers
@@ -620,7 +659,41 @@ class IntentContainer:
             return True
         return False
 
-    def _match(self, query, intent_name, regexes, slot_context=None):
+    def _slot_penalty(self, intent_name, entities, slot_context, typed,
+                      unregistered) -> Optional[float]:
+        """The confidence penalty of the slots one regex bound, or ``None``
+        when a typed slot binds words that no listed span of its type covers.
+
+        OVOS-INTENT-1 §5.6 lets an engine require a span the typed-slot map
+        lists for the slot's type, and a typed placeholder takes only a value
+        of its type: "play jazz" is never a date. Where the map lists the
+        type, a slot sharing no word with a listed span rejects the regex, and
+        the pipeline narrows a slot that shares one to the listed span after
+        the match. Where the map lists no span of the type, the parser may
+        lack the language as well as the value, so the slot is left to the
+        template.
+        """
+        normed, listed = typed
+        types = self.slot_types.get(intent_name, {})
+        penalty = 0.0
+        for k, v in entities.items():
+            spans = listed.get(types.get(k))
+            if spans and not _shares_a_word(v, normed, spans):
+                return None
+            entity_key = self._entity_key(intent_name, k)
+            if entity_key is None:
+                # penalize unregistered entities
+                penalty += unregistered
+            elif not self._entity_member(entity_key, v):
+                if self._apply_slot_candidate(entities, k, v, slot_context,
+                                              intent_name, entity_key):
+                    continue
+                # penalize parsed entity value not in samples
+                penalty += 0.1
+        return penalty
+
+    def _match(self, query, intent_name, regexes, slot_context=None, typed=None):
+        typed = typed or (query.split(), {})
         query_has_upper = query != query.lower()
         for r in regexes:
             penalty = self._regex_penalty.get(r, 0.0)
@@ -637,17 +710,11 @@ class IntentContainer:
                 entities = self._cased_matchers[r].match(query)
 
             if entities is not None:
-                for k, v in entities.items():
-                    entity_key = self._entity_key(intent_name, k)
-                    if entity_key is None:
-                        # penalize unregistered entities
-                        penalty += 0.04
-                    elif not self._entity_member(entity_key, v):
-                        if self._apply_slot_candidate(entities, k, v, slot_context,
-                                                      intent_name, entity_key):
-                            continue
-                        # penalize parsed entity value not in samples
-                        penalty += 0.1
+                slot_penalty = self._slot_penalty(intent_name, entities, slot_context,
+                                                  typed, 0.04)
+                if slot_penalty is None:
+                    continue
+                penalty += slot_penalty
                 return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name, "_matched_regex": r}
 
             if r not in self._uncased_matchers:
@@ -661,19 +728,13 @@ class IntentContainer:
             if entities is not None:
                 # query_has_upper + uncased match = genuine case mismatch
                 entity_penalty = 0.04 if not query_has_upper else 0.05
+                slot_penalty = self._slot_penalty(intent_name, entities, slot_context,
+                                                  typed, entity_penalty)
+                if slot_penalty is None:
+                    continue
                 if query_has_upper:
                     penalty += 0.05
-                for k, v in entities.items():
-                    entity_key = self._entity_key(intent_name, k)
-                    if entity_key is None:
-                        # penalize unregistered entities
-                        penalty += entity_penalty
-                    elif not self._entity_member(entity_key, v):
-                        if self._apply_slot_candidate(entities, k, v, slot_context,
-                                                      intent_name, entity_key):
-                            continue
-                        # penalize parsed entity value not in samples
-                        penalty += 0.1
+                penalty += slot_penalty
                 return {"entities": entities or {}, "conf": round(max(0.0, 1.0 - penalty), 4), "name": intent_name, "_matched_regex": r}
 
         if self.fuzz:
@@ -692,7 +753,8 @@ class IntentContainer:
                     continue
                 for s in variants:
                     entities = self._fuzzy_score(query, s, 0.25)
-                    if entities:
+                    if entities and self._slot_penalty(intent_name, entities["entities"],
+                                                       None, typed, 0.0) is not None:
                         entities["name"] = intent_name
                         return entities
 
@@ -714,7 +776,7 @@ class IntentContainer:
         if entities is not None:
             return {"entities": entities or {}, "conf": score}
 
-    def calc_intents(self, query: str, slot_context=None) -> Iterator[dict]:
+    def calc_intents(self, query: str, slot_context=None, typed_spans=()) -> Iterator[dict]:
         """
         Determine possible intents for a given query
         @param query: input to evaluate for an intent match
@@ -722,11 +784,15 @@ class IntentContainer:
             ``(owner_id, slot_name) -> value`` of live session context
             candidates, offered to the matcher before it resolves competing
             regex candidates
+        @param typed_spans: OVOS-INTENT-1 §5.6 — ``(type, start, end)``
+            character spans of *query* that the typed-slot map lists; a typed
+            slot must bind words one of them covers
         @return: yields dict intent matches
         """
         utterance = query
         normed_tokens, word_spans = _normalize_tokens(utterance)
         query = " ".join(normed_tokens)
+        typed = (normed_tokens, _typed_words(typed_spans, word_spans))
 
         # Lazy cache rebuild - only rebuild once after bulk registration
         # This avoids O(n²) scaling during registration (rebuild on every add)
@@ -740,7 +806,7 @@ class IntentContainer:
         for intent_name, regexes in self._intent_list:
             if intent_name in excluded_intents:
                 continue
-            res = self._match(query, intent_name, regexes, slot_context)
+            res = self._match(query, intent_name, regexes, slot_context, typed)
             if res is not None:
                 # OVOS-INTENT-1 §5.2/§5.3: the slot carries the surface words,
                 # not the folded ones the match ran on
