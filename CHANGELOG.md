@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.2a1](https://github.com/OpenVoiceOS/padacioso/tree/2.5.2a1) (2026-10-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.5.1a1...2.5.2a1)
+
+**Merged pull requests:**
+
+- fix: an entity value is a member whatever diacritics it was spelled with [\#128](https://github.com/OpenVoiceOS/padacioso/pull/128) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.5.1a1](https://github.com/OpenVoiceOS/padacioso/tree/2.5.1a1) (2026-10-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.5.0a1...2.5.1a1)
@@ -397,17 +405,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a8...V0.2.1a9)
 
-**Fixed bugs:**
-
-- fix/fuzzy\_match scores [\#19](https://github.com/OpenVoiceOS/padacioso/pull/19) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [V0.2.1a8](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a8) (2023-07-12)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.1a7...V0.2.1a8)
-
-**Implemented enhancements:**
-
-- feat/disambiguation [\#18](https://github.com/OpenVoiceOS/padacioso/pull/18) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [V0.2.1a7](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.1a7) (2023-07-12)
 
