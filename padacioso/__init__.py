@@ -34,23 +34,23 @@ def _word_spans(token: str, offset: int = 0) -> Iterator[Tuple[int, int]]:
     A ``{slot}`` span is atomic, exactly as `normalize_for_match` keeps it:
     its braces are `Ps`/`Pe` and would otherwise separate, which would reduce
     ``"{name}"`` to ``"name"`` and silently turn the marker into a literal
-    word, so the template would stop capturing anything at all.
+    word, so the template would stop capturing anything at all. Inside a word
+    it counts as letters do: ``"{schedkind}-inu"`` stays one word, because
+    the fold keeps ``"alarme-inu"`` one word and the template must fold the
+    way the utterance does.
     """
-    for match in re.finditer(r"\{[^{}]*\}|[^{}]+", token):
-        part, base = match.group(), offset + match.start()
-        if part.startswith("{"):
-            yield base, base + len(part)
+    start = end = None
+    for match in re.finditer(r"\{[^{}]*\}|.", token, re.DOTALL):
+        if len(match.group()) == 1 and _separates_words(match.group()):
+            if start is not None:
+                yield offset + start, offset + end
+                start = None
             continue
-        start = None
-        for i, char in enumerate(part):
-            if _separates_words(char):
-                if start is not None:
-                    yield base + start, base + i
-                    start = None
-            elif start is None:
-                start = i
-        if start is not None:
-            yield base + start, base + len(part)
+        if start is None:
+            start = match.start()
+        end = match.end()
+    if start is not None:
+        yield offset + start, offset + end
 
 
 def _normalize_tokens(text: str):
