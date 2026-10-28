@@ -120,11 +120,6 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # unresolved so the OVOS-CONTEXT-1 §7 slot fill can supply it from
         # session context.
         self._intent_slot_blacklists = {}
-        # OVOS-INTENT-1 §5.6 — the type each typed placeholder declares,
-        # keyed by (lang, internal intent name) -> {slot_name: type_name}.
-        # Read at match time so a typed slot can be bound where the
-        # typed-slot map says it may.
-        self._intent_slot_types = {}
         self.max_words = 50  # if an utterance contains more words than this, don't attempt to match
         LOG.debug('Loaded Padacioso intent parser.')
 
@@ -178,10 +173,11 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         if isinstance(payload_types, dict):
             declared.update({str(k): str(v) for k, v in payload_types.items()})
         declared = {k: v for k, v in declared.items() if v in REGISTERED_TYPES}
+        slot_types = self.containers[lang].slot_types
         if declared:
-            self._intent_slot_types[(lang, name)] = declared
+            slot_types[name] = declared
         else:
-            self._intent_slot_types.pop((lang, name), None)
+            slot_types.pop(name, None)
 
     @staticmethod
     def _value_blacklisted(value: str, blacklist: List[str]) -> bool:
@@ -305,10 +301,10 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         for l in target_langs:
             if l in self.containers:
                 self.containers[l].remove_intent(intent_name)
+                self.containers[l].slot_types.pop(intent_name, None)
             # the blacklist store is keyed per (lang, name), so it is safe to
             # drop the entry for each detached language independently
             self._intent_slot_blacklists.pop((l, intent_name), None)
-            self._intent_slot_types.pop((l, intent_name), None)
         # only drop the manifest/context-gate bookkeeping once the intent
         # is gone from every language container, otherwise a scoped detach
         # (e.g. re-registering one lang) would wrongly unregister an intent
@@ -741,9 +737,10 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # matching. The intra-call burst (multiple ASR hypotheses below) still
         # benefits from the cache after this clear.
         _calc_padacioso_intent.cache_clear()
+        typed = _typed_slot_map(message)
         intents = [_calc_padacioso_intent(utt, intent_container,
                                           blacklisted_intents, blacklisted_skills,
-                                          slot_context)
+                                          slot_context, _listed_spans(typed, utt))
                    for utt in utterances]
         intents = [i for i in intents if i is not None]
         # OVOS-CONTEXT-1 §6/§6.1 — drop candidates whose requires_context /
@@ -766,21 +763,21 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         # select best
         if intents:
             best = max(intents, key=lambda k: k.conf)
-            self._bind_typed_slots(best, message, lang)
+            self._bind_typed_slots(best, typed, lang)
             self._apply_slot_context(best, ctx, lang)
             return best
 
     def _bind_typed_slots(self, intent: PadaciosoIntent,
-                          message: Optional[Message], lang: str) -> None:
+                          typed: Dict[str, List[dict]], lang: str) -> None:
         """OVOS-INTENT-1 §5.6 — bind a typed placeholder where the map allows.
 
-        The map is a hint, not a vocabulary: it says where a datum of a kind
-        was found and what it normalizes to, and an engine MAY use it to
-        constrain where ``{type:name}`` matches. This engine prefers a listed
-        span over the template's own guess, because a regex captures every
-        word between its literals and a parser reads the datum: "set a timer
-        for about twenty minutes" gives ``{number:amount}`` no reason to drop
-        "about".
+        The map says where a datum of a kind was found, and an engine MAY use
+        it to constrain where ``{type:name}`` matches. The matcher already
+        dropped every candidate whose typed slot shares no word with a listed
+        span (``IntentContainer._slot_penalty``). This narrows the binding to
+        the listed span, because a regex captures every word between its
+        literals and a parser reads the datum: "set a timer for about twenty
+        minutes" gives ``{number:amount}`` no reason to drop "about".
 
         An entry applies only to the candidate this match was made from
         (``intent.sent``, the raw utterance) and only where the span invariant
@@ -793,18 +790,8 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         ``Match.slots[name]`` stays the surface string (PIPELINE-1 §4.3); only
         which surface is bound changes.
         """
-        declared = self._intent_slot_types.get((lang, intent.name))
-        if not declared or message is None:
-            return
-        raw = message.data.get("typed_slots")
-        if not isinstance(raw, dict) or not raw:
-            return
-        try:
-            typed = drop_unregistered_typed_slots(raw)
-            validate_typed_slots(typed)
-        except MalformedTypedSlots as exc:
-            LOG.warning(f"ignoring a malformed typed_slots map "
-                        f"(INTENT-1 5.6): {exc}")
+        declared = self.containers[lang].slot_types.get(intent.name)
+        if not declared or not typed:
             return
         utterance = intent.sent or ""
         if not utterance:
@@ -881,6 +868,37 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         self.bus.remove(SpecMessage.SKILL_DEREGISTER.value, self.handle_deregister_skill)
         self.bus.remove(SpecMessage.INTENT_ENABLE.value, self.handle_enable_intent)
         self.bus.remove(SpecMessage.INTENT_DISABLE.value, self.handle_disable_intent)
+
+
+def _typed_slot_map(message: Optional[Message]) -> Dict[str, List[dict]]:
+    """The OVOS-INTENT-1 §5.6 typed-slot map the message carries.
+
+    Types outside the registry are dropped. An absent map, or a malformed one
+    (logged), reads as empty, which leaves every typed slot to the template.
+    """
+    raw = message.data.get("typed_slots") if message is not None else None
+    if not isinstance(raw, dict) or not raw:
+        return {}
+    try:
+        typed = drop_unregistered_typed_slots(raw)
+        validate_typed_slots(typed)
+    except MalformedTypedSlots as exc:
+        LOG.warning(f"ignoring a malformed typed_slots map "
+                    f"(INTENT-1 5.6): {exc}")
+        return {}
+    return typed
+
+
+def _listed_spans(typed: Dict[str, List[dict]], utterance: str) -> frozenset:
+    """``(type, start, end)`` of the map entries read from *utterance*.
+
+    The map is computed over every candidate utterance, and an entry belongs
+    to the one where ``utterance[start:end] == surface`` holds.
+    """
+    return frozenset((type_name, *entry["span"])
+                     for type_name, entries in typed.items()
+                     for entry in entries
+                     if utterance[entry["span"][0]:entry["span"][1]] == entry["surface"])
 
 
 def _closest_typed_entry(entries, utterance, bound, used=None):
@@ -990,7 +1008,8 @@ def _calc_padacioso_intent(utt: str,
                            intent_container: FallbackIntentContainer,
                            blacklisted_intents: frozenset = frozenset(),
                            blacklisted_skills: frozenset = frozenset(),
-                           slot_context: frozenset = frozenset()) -> \
+                           slot_context: frozenset = frozenset(),
+                           typed_spans: frozenset = frozenset()) -> \
         Optional[PadaciosoIntent]:
     """
     Try to match an utterance to an intent in an intent_container
@@ -1008,7 +1027,8 @@ def _calc_padacioso_intent(utt: str,
         # Matches are canonical by construction (registration-time alias
         # collapse, see PadaciosoPipeline.register_intent), so only the
         # blacklist needs canonicalizing here.
-        intents = [i for i in intent_container.calc_intents(utt, slot_context_map)
+        intents = [i for i in intent_container.calc_intents(utt, slot_context_map,
+                                                            typed_spans)
                    if i is not None
                    and i["name"] not in blacklisted_intents
                    and i["name"].split(":")[0] not in blacklisted_skills]

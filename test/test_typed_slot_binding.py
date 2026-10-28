@@ -129,17 +129,26 @@ class TestTypedSlotBinding(unittest.TestCase):
         self.assertEqual(match.match_data.get("amount"), "about twenty",
                          "an entry failing the invariant leaves the template binding")
 
-    def test_an_entry_that_does_not_overlap_the_bound_is_not_applied(self):
-        """No listed span overlaps the template guess: the binding stays."""
+    def test_a_typed_slot_that_binds_no_listed_span_does_not_match(self):
+        """§5.6 "requiring a span the map lists for that type": the map places
+        the only number at "set", so the template guess "about twenty" holds
+        no number and the template does not match."""
         pipeline = _pipeline()
         _register(pipeline, self.SAMPLES)
-        # "set" is a valid entry on this utterance, but it does not overlap
-        # the template-bound "about twenty".
         typed = {"number": [{"span": [0, 3], "surface": "set", "value": 1}]}
+        self.assertIsNone(self._match(pipeline, [self.UTTERANCE], typed),
+                          "a typed slot must not bind words the map lists no value in")
+
+    def test_a_type_the_map_does_not_list_leaves_the_slot_to_the_template(self):
+        """The transformer omits a type that produced nothing, and also one
+        whose parser lacks the language, so a map without numbers says
+        nothing about "about twenty"."""
+        pipeline = _pipeline()
+        _register(pipeline, self.SAMPLES)
+        typed = {"date": [{"span": [0, 3], "surface": "set", "value": "2030-01-01"}]}
         match = self._match(pipeline, [self.UTTERANCE], typed)
         self.assertIsNotNone(match)
-        self.assertEqual(match.match_data.get("amount"), "about twenty",
-                         "a non-overlapping entry must not replace the template binding")
+        self.assertEqual(match.match_data.get("amount"), "about twenty")
 
     def test_two_slots_of_the_same_type_do_not_collapse(self):
         """Each entry may be assigned to at most one slot of its type."""
@@ -147,16 +156,17 @@ class TestTypedSlotBinding(unittest.TestCase):
         samples = ["wake me in {number:a} minutes and again in {number:b} minutes"]
         _register(pipeline, samples)
         utterance = "wake me in twenty minutes and again in ten minutes"
-        # Only one number is listed in the map; the second slot must keep its
-        # own template binding.
-        start = utterance.index("twenty")
-        typed = _typed(utterance, start, start + len("twenty"), 20)
+        # both slots overlap only their own entry, and each entry is used once
+        twenty, ten = utterance.index("twenty"), utterance.index("ten ")
+        typed = {"number": [
+            {"span": [ten, ten + 3], "surface": "ten", "value": 10},
+            {"span": [twenty, twenty + 6], "surface": "twenty", "value": 20}]}
         # two wildcard slots score 0.92 in padacioso: the medium level
         match = self._match(pipeline, [utterance], typed, level="match_medium")
         self.assertIsNotNone(match)
         self.assertEqual(match.match_data.get("a"), "twenty")
         self.assertEqual(match.match_data.get("b"), "ten",
-                         "the only listed number must not be reused for b")
+                         "each slot binds its own listed number")
 
     def test_capitalized_utterance_uses_typed_span(self):
         """The invariant is checked on the original casing of the utterance."""
@@ -191,7 +201,7 @@ class TestTypedSlotBinding(unittest.TestCase):
         """`{bogus:amount}` names no registered type: nothing to bind from."""
         pipeline = _pipeline()
         _register(pipeline, ["set a timer for {bogus:amount} minutes"])
-        self.assertIsNone(pipeline._intent_slot_types.get((LANG, NAME)))
+        self.assertIsNone(pipeline.containers[LANG].slot_types.get(NAME))
         start = self.UTTERANCE.index("twenty")
         typed = {"bogus": [{"span": [start, start + 6], "surface": "twenty",
                             "value": 20}]}
@@ -202,12 +212,56 @@ class TestTypedSlotBinding(unittest.TestCase):
     def test_detach_drops_the_declared_types(self):
         pipeline = _pipeline()
         _register(pipeline, self.SAMPLES)
-        self.assertEqual(pipeline._intent_slot_types.get((LANG, NAME)),
+        self.assertEqual(pipeline.containers[LANG].slot_types.get(NAME),
                          {"amount": "number"})
         pipeline.bus.emit(Message("ovos.intent.deregister",
                                   {"skill_id": SKILL, "intent_name": INTENT},
                                   {"skill_id": SKILL}))
-        self.assertIsNone(pipeline._intent_slot_types.get((LANG, NAME)))
+        self.assertIsNone(pipeline.containers[LANG].slot_types.get(NAME))
+
+
+class TestDateSlotRejectsNonDates(unittest.TestCase):
+    """A ``{date:time}`` slot never binds "play jazz".
+
+    The alerts skill ships both intents below. Without the typed-slot map
+    requirement, reschedule_alert binds ``time="play jazz"`` and outscores
+    change_media_properties, whose ``schedkind`` is no member of its entity.
+    """
+    SKILL = "alerts.skill"
+    UTTERANCE = "change my 7 am alarm to play jazz"
+
+    def setUp(self):
+        self.pipeline = _pipeline()
+        for intent, samples in (
+                ("reschedule_alert", ["change my {date:old} alarm to {date:time}"]),
+                ("change_media_properties", ["change my {schedkind} to play {mediakind}"])):
+            self.pipeline.bus.emit(Message(
+                "ovos.intent.register.template",
+                {"skill_id": self.SKILL, "intent_name": intent, "lang": LANG,
+                 "samples": samples}, {"skill_id": self.SKILL}))
+        self.pipeline.bus.emit(Message(
+            "ovos.entity.register",
+            {"skill_id": self.SKILL, "entity_name": "schedkind", "lang": LANG,
+             "samples": ["alarm"]}, {"skill_id": self.SKILL}))
+
+    def _match(self, utterance, dates):
+        typed = {"date": [{"span": [utterance.index(d), utterance.index(d) + len(d)],
+                           "surface": d, "value": value} for d, value in dates.items()]}
+        return self.pipeline.match_low([utterance], LANG, _message([utterance], typed))
+
+    def test_words_that_hold_no_date_are_not_a_time(self):
+        match = self._match(self.UTTERANCE, {"7 am": "2030-01-01T07:00:00+00:00"})
+        self.assertIsNotNone(match)
+        self.assertEqual(match.match_type, f"{self.SKILL}:change_media_properties")
+        self.assertEqual(match.match_data.get("mediakind"), "jazz")
+
+    def test_a_listed_date_is_a_time(self):
+        utterance = "change my 7 am alarm to 8 am"
+        match = self._match(utterance, {"7 am": "2030-01-01T07:00:00+00:00",
+                                        "8 am": "2030-01-01T08:00:00+00:00"})
+        self.assertIsNotNone(match)
+        self.assertEqual(match.match_type, f"{self.SKILL}:reschedule_alert")
+        self.assertEqual(match.match_data.get("time"), "8 am")
 
 
 class TestClosestTypedEntry(unittest.TestCase):
