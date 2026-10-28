@@ -261,6 +261,7 @@ class IntentContainer:
         self.available_contexts = {}
         self.required_contexts = {}
         self.excluded_keywords = {}
+        self.required_keywords = {}
         self.excluded_contexts = {}
 
         # Cache for optimization - pre-built list for fast iteration
@@ -444,12 +445,17 @@ class IntentContainer:
         # filter intents based on context/excluded keywords
         excluded_intents = []
         query_words = set(query.split())
+
+        def _kw_hit(kw):
+            if ' ' not in kw:
+                return kw in query_words
+            return bool(re.search(r'\b' + re.escape(kw) + r'\b', query))
+
         for intent_name, samples in self.excluded_keywords.items():
-            def _kw_hit(kw, _qw=query_words, _q=query):
-                if ' ' not in kw:
-                    return kw in _qw
-                return bool(re.search(r'\b' + re.escape(kw) + r'\b', _q))
             if any(_kw_hit(s) for s in samples):
+                excluded_intents.append(intent_name)
+        for intent_name, samples in self.required_keywords.items():
+            if not any(_kw_hit(s) for s in samples):
                 excluded_intents.append(intent_name)
         for intent_name, contexts in self.required_contexts.items():
             if intent_name not in self.available_contexts:
@@ -744,6 +750,14 @@ class IntentContainer:
     def exclude_keywords(self, intent_name, samples):
         folded = [kw for kw in map(_normalize, samples) if kw]
         self.excluded_keywords.setdefault(intent_name, []).extend(folded)
+        self._cache_dirty = True  # Mark cache as needing rebuild
+
+    def require_keywords(self, intent_name, samples):
+        # an intent with no keyword left after folding has no requirement,
+        # so an empty set must not be stored: it would reject every query
+        folded = [kw for kw in map(_normalize, samples) if kw]
+        if folded:
+            self.required_keywords.setdefault(intent_name, []).extend(folded)
         self._cache_dirty = True  # Mark cache as needing rebuild
 
     def set_context(self, intent_name, context_name, context_val=None):

@@ -149,6 +149,21 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         else:
             self._intent_slot_blacklists.pop((lang, name), None)
 
+    def _store_required_keywords(self, name: str, data: Dict, lang: str):
+        """OVOS-INTENT-2 §4.5 — retain the keywords of which one must occur.
+
+        The registration payload may carry ``required_keywords`` (OVOS-INTENT-4
+        §6.1). A registration replaces the intent's prior keywords in this
+        language, and an absent or empty list clears them. The keywords live
+        in the container beside the intent, so a disable and enable keeps
+        them.
+        """
+        container = self.containers[lang]
+        container.required_keywords.pop(name, None)
+        keywords = data.get("required_keywords")
+        if keywords:
+            container.require_keywords(name, list(keywords))
+
     def _store_slot_types(self, name: str, data: Dict, samples: List[str],
                           lang: str):
         """OVOS-INTENT-1 §5.6 — record the types the templates declare.
@@ -446,6 +461,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
                     self.registered_intents.append(message.data['name'])
                 self._store_context_gate(message.data['name'], message.data)
                 self._store_slot_blacklist(message.data['name'], message.data, lang)
+                self._store_required_keywords(message.data['name'], message.data, lang)
                 # the samples may have come from ``file_name``; the
                 # container keeps the expanded (bare-name) lines, so the
                 # types are read from the raw payload samples when present
@@ -492,8 +508,9 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         """OVOS-INTENT-4 §6 — register a template intent.
 
         Maps the spec payload (``skill_id`` + ``intent_name`` + ``samples`` +
-        optional ``blacklist`` + ``lang``) onto the engine's namespaced
-        ``add_intent`` call, reusing the legacy registration internals.
+        optional ``blacklist`` + ``required_keywords`` + ``lang``) onto the
+        engine's namespaced ``add_intent`` call, reusing the legacy
+        registration internals.
         """
         topic = SpecMessage.INTENT_REGISTER_TEMPLATE.value
         data = message.data
@@ -537,6 +554,7 @@ class PadaciosoPipeline(ConfidenceMatcherPipeline):
         blacklist = data.get("blacklist")
         if blacklist:  # §6.1 suppression phrases
             self.containers[lang].exclude_keywords(name, list(blacklist))
+        self._store_required_keywords(name, data, lang)
 
     def handle_register_entity(self, message: Message):
         """OVOS-INTENT-4 §7 — register an entity value-set hint."""

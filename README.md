@@ -55,7 +55,10 @@ Enables approximate matching for utterances that are close but not exact.
 container.require_context("purchase", "authenticated")
 container.set_context("purchase", "authenticated")
 container.exclude_keywords("music", ["stop"])
+container.require_keywords("wikihow", ["wikihow", "wiki how"])
 ```
+
+`exclude_keywords` suppresses an intent when one of its keywords occurs in the query. `require_keywords` suppresses an intent when none of its keywords occurs. A keyword occurs as a sequence of whole words, so `wikihow` does not occur in `wikihowto`.
 
 ## Accuracy
 
