@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.5a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.5a1) (2026-10-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.4a1...2.4.5a1)
+
+**Merged pull requests:**
+
+- fix: resolve a slot's entity list under the owning skill's namespace [\#119](https://github.com/OpenVoiceOS/padacioso/pull/119) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.4.4a1](https://github.com/OpenVoiceOS/padacioso/tree/2.4.4a1) (2026-10-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/2.4.3a1...2.4.4a1)
@@ -429,17 +437,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.2.0...V0.2.1a1)
 
-**Merged pull requests:**
-
-- add package data [\#9](https://github.com/OpenVoiceOS/padacioso/pull/9) ([emphasize](https://github.com/emphasize))
-
 ## [V0.2.0](https://github.com/OpenVoiceOS/padacioso/tree/V0.2.0) (2023-05-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/padacioso/compare/V0.1.3a2...V0.2.0)
-
-**Merged pull requests:**
-
-- 0.2.0 [\#8](https://github.com/OpenVoiceOS/padacioso/pull/8) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [V0.1.3a2](https://github.com/OpenVoiceOS/padacioso/tree/V0.1.3a2) (2023-05-05)
 
