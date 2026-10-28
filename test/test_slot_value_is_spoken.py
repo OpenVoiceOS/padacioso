@@ -1,5 +1,7 @@
 import unittest
 
+from ovos_spec_tools import normalize_for_match
+
 from padacioso import IntentContainer
 
 
@@ -169,3 +171,101 @@ class TestSlotValueKeepsItsCase(unittest.TestCase):
         self.assertEqual(
             self._name("avbryt mitt larm för {name}",
                        "avbryt mitt larm för Åsa Öberg"), "Åsa Öberg")
+
+    def test_a_name_glued_to_a_mark_still_keeps_its_diacritics(self):
+        """A separating mark inside the captured span must not fold the value.
+
+        OVOS-INTENT-2 §4.3 counts whole words, so `normalize_for_match`
+        replaces a word-separating mark with a space (architecture, T-7149):
+        ``"Åsa,please"`` folds to two words. While `_normalize_tokens` paired
+        one folded string against one whitespace token, that two-word string
+        sat in a list whose reader assumes one word per entry; the span lookup
+        missed and the folded form was handed back, so a name the user gave as
+        ``Åsa`` reached the skill as ``asa``. This is the §5.3 defect this
+        class exists for, reached through a mark instead of through a fold in
+        place.
+
+        The spaced form is the control. It never showed the defect, because
+        whitespace already split the token, so a fix measured only on it would
+        prove nothing.
+        """
+        glued = self._name("avbryt mitt larm för {name}",
+                           "avbryt mitt larm för Åsa,snälla")
+        spaced = self._name("avbryt mitt larm för {name}",
+                            "avbryt mitt larm för Åsa, snälla")
+        for value, label in ((glued, "glued"), (spaced, "spaced (control)")):
+            self.assertIn("Åsa", value,
+                          f"{label}: the spoken name lost its diacritics: {value!r}")
+            self.assertNotIn("asa", value, f"{label}: value was folded: {value!r}")
+
+    def test_every_normalized_entry_is_one_word_of_its_span(self):
+        """The two lists are aligned by index, so an entry must be one word.
+
+        A whitespace token is not always one word once a separating mark folds
+        to a space. The span lookup depends on element *i* of each list being
+        one word, and on the span naming where that word sits in the text, so
+        both are asserted directly here rather than only through a slot value.
+        The expected fold comes from `normalize_for_match` on the span's own
+        text, which is computed without the pairing under test.
+        """
+        from padacioso import _normalize_tokens
+        for text in ("yes,please stop", "avbryt för Åsa,snälla",
+                     "bale،mamnun", "今何時。今日", "don't stop", "«larm»",
+                     "March 3, 2027"):
+            normed, spans = _normalize_tokens(text)
+            self.assertEqual(len(normed), len(spans), text)
+            for entry, (start, end) in zip(normed, spans):
+                self.assertNotIn(" ", entry,
+                                 f"{text!r} produced a multi-word entry {entry!r}")
+                self.assertEqual(entry, normalize_for_match(text[start:end]),
+                                 f"{text!r}: entry {entry!r} is not the fold of "
+                                 f"its span {text[start:end]!r}")
+
+    def test_a_slot_marker_is_not_split_by_its_own_braces(self):
+        """A brace is `Ps`/`Pe`, so it separates words like any other mark.
+
+        Splitting inside ``{name}`` would leave the literal word ``name`` and
+        the template would capture nothing at all. The span is atomic, exactly
+        as `normalize_for_match` keeps it.
+        """
+        from padacioso import _word_spans
+
+        def words(token):
+            return [token[s:e] for s, e in _word_spans(token)]
+
+        self.assertEqual(words("{name}"), ["{name}"])
+        self.assertEqual(words("({requested_color})"), ["{requested_color}"])
+        self.assertEqual(words("{a}b,c"), ["{a}", "b", "c"])
+
+    def test_a_captured_value_is_a_span_of_the_utterance(self):
+        """OVOS-INTENT-1 §5.6: ``utterance[start:end] == surface``.
+
+        A slot value is read back by a consumer that holds no span: §5.6 says
+        it "takes the entry whose `surface` equals the slot value", and
+        ovos-workshop's `typed_slots` compares the two strings exactly. So a
+        value that is not a span of the utterance silently finds no typed
+        datum.
+
+        Rejoining the captured words with single spaces breaks that wherever
+        a word-separating mark stood between them, which an English date does
+        every time. The last case is the control: it carries no mark, so it
+        reads the same under either construction and a fix measured only on it
+        would prove nothing.
+        """
+        for template, utterance, expected in (
+                ("set an alarm for {when}", "set an alarm for March 3, 2027",
+                 "March 3, 2027"),
+                ("call {name}", "call Smith, John", "Smith, John"),
+                ("set an alarm for {when}", "set an alarm for March 3 2027",
+                 "March 3 2027"),
+        ):
+            with self.subTest(utterance=utterance):
+                container = IntentContainer()
+                container.add_intent("i", [template])
+                match = container.calc_intent(utterance)
+                self.assertIsNotNone(match, f"{utterance!r} did not match")
+                slot = template[template.index("{") + 1:template.index("}")]
+                value = match["entities"].get(slot)
+                self.assertEqual(value, expected)
+                self.assertIn(value, utterance,
+                              f"{value!r} is no span of {utterance!r}")
