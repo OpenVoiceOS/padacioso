@@ -279,3 +279,26 @@ class TestClosestTypedEntry(unittest.TestCase):
         self.assertIs(_closest_typed_entry([ten, twenty], utterance, "ten"), ten)
         self.assertIs(_closest_typed_entry([ten, twenty], utterance, "twenty"),
                       twenty)
+
+
+class TestFuzzyMatchRequiresTheTypedSpan(unittest.TestCase):
+    """The fuzzy pass holds a typed slot to the same rule as the exact pass."""
+
+    def _calc(self, utterance, dates):
+        from padacioso import IntentContainer
+        container = IntentContainer(fuzz=True)
+        container.add_intent("alerts.skill:reschedule_alert",
+                             ["change my {old} alarm to {time}"])
+        container.slot_types["alerts.skill:reschedule_alert"] = {"old": "date", "time": "date"}
+        spans = frozenset(("date", utterance.index(d), utterance.index(d) + len(d))
+                          for d in dates)
+        return list(container.calc_intents(utterance, typed_spans=spans))
+
+    def test_a_fuzzy_candidate_binding_no_date_is_rejected(self):
+        # "please" makes the exact pass miss, so only the fuzzy pass can match
+        self.assertEqual(self._calc("please change my 7 am alarm to play jazz", ["7 am"]), [])
+
+    def test_a_fuzzy_candidate_binding_listed_dates_matches(self):
+        matches = self._calc("please change my 7 am alarm to 8 am", ["7 am", "8 am"])
+        self.assertEqual([m["name"] for m in matches], ["alerts.skill:reschedule_alert"])
+        self.assertEqual(matches[0]["entities"]["time"], "8 am")

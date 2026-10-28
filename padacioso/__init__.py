@@ -747,7 +747,8 @@ class IntentContainer:
                     continue
                 for s in variants:
                     entities = self._fuzzy_score(query, s, 0.25)
-                    if entities:
+                    if entities and self._slot_penalty(intent_name, entities["entities"],
+                                                       None, typed, 0.0) is not None:
                         entities["name"] = intent_name
                         return entities
 
