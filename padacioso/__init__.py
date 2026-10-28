@@ -314,6 +314,9 @@ def _sample_within_budget(name: str, lines: List[str], budget: int):
 class IntentContainer:
     def __init__(self, fuzz=False, n_workers=4, max_expansions=MAX_EXPANSIONS):
         self.intent_samples, self.entity_samples = {}, {}
+        # each entity's values as the matcher folds a query, so a captured
+        # value is compared in the form it was captured in
+        self._folded_entities = {}
         # per-instance override of the module default MAX_EXPANSIONS, so a
         # deployment with a pathological template can lower the resident
         # memory cost (or raise it, if it has the budget) without touching
@@ -492,6 +495,7 @@ class IntentContainer:
                         f"uniformly). Raise IntentContainer(max_expansions=...) "
                         f"if this entity needs to keep more.")
         self.entity_samples[name] = set(expanded)
+        self._folded_entities[name] = {_normalize(e) for e in expanded}
         self._cache_dirty = True  # Mark cache as needing rebuild
 
     def remove_entity(self, name: str):
@@ -502,6 +506,7 @@ class IntentContainer:
         name = name.lower()
         if name in self.entity_samples:
             del self.entity_samples[name]
+            self._folded_entities.pop(name, None)
 
     def _rebuild_cache(self):
         """
@@ -583,16 +588,17 @@ class IntentContainer:
         return None
 
     def _entity_member(self, k: str, value) -> bool:
-        """Case-insensitive membership of ``value`` in entity ``k``'s samples.
+        """Membership of ``value`` in entity ``k``'s samples, both folded.
 
-        Queries are lowercased by ``_normalize`` before matching, but a
-        registered entity sample keeps whatever case the skill declared it
-        with, so a plain ``in`` check would judge a correct, utterance-
-        produced value (e.g. "bob") "not a member" of {"Bob"} purely due to
-        case — which would then let a live context candidate silently
-        overwrite it (violates §7's "utterance value always wins" rule).
+        The match runs on the query as ``_normalize`` folds it: lowercase,
+        diacritics and punctuation folded. A registered sample keeps the
+        spelling the skill declared it with, so a plain ``in`` check judges
+        "bob" no member of {"Bob"}, and "musica", the capture of "música", no
+        member of {"música"}. Each miss costs the match the member score, and
+        lets a live context candidate overwrite a value the user said
+        (violates §7's "utterance value always wins" rule).
         """
-        return str(value).lower() in {s.lower() for s in self.entity_samples[k]}
+        return _normalize(str(value)) in self._folded_entities[k]
 
     def _apply_slot_candidate(self, entities, k, v, slot_context, intent_name,
                               entity_key):
