@@ -235,7 +235,9 @@ class TestSlotValueKeepsItsCase(unittest.TestCase):
 
         self.assertEqual(words("{name}"), ["{name}"])
         self.assertEqual(words("({requested_color})"), ["{requested_color}"])
-        self.assertEqual(words("{a}b,c"), ["{a}", "b", "c"])
+        # inside a word the marker counts as letters, as the fold counts it
+        self.assertEqual(words("{a}b,c"), ["{a}b", "c"])
+        self.assertEqual(words("{schedkind}-inu"), ["{schedkind}-inu"])
 
     def test_a_captured_value_is_a_span_of_the_utterance(self):
         """OVOS-INTENT-1 §5.6: ``utterance[start:end] == surface``.
